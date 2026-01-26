@@ -1,4 +1,4 @@
-# HomePiNAS v1.5.4
+# HomePiNAS v1.5.5
 
 Premium NAS Dashboard for Raspberry Pi CM5 - Security Hardened Edition
 
@@ -11,7 +11,7 @@ Premium NAS Dashboard for Raspberry Pi CM5 - Security Hardened Edition
 - **System Monitoring** - CPU, Memory, Disk, Network stats
 - **DDNS Support** - Cloudflare, No-IP, DuckDNS
 
-## Security Features (v1.5.4)
+## Security Features (v1.5.5)
 
 - Bcrypt password hashing (12 rounds)
 - SQLite-backed persistent sessions with expiration
@@ -39,6 +39,11 @@ curl -fsSL https://raw.githubusercontent.com/juanlusoft/homepinas-v2/main/instal
 - SMB Share: `\\<IP>\Storage`
 
 ## Version History
+
+- **1.5.5** - Fan hysteresis
+  - Added temperature hysteresis to prevent fan speed oscillation
+  - State file tracks previous PWM values
+  - Configurable HYST_TEMP parameter per preset
 
 - **1.5.4** - Persistent sessions
   - SQLite-backed session storage

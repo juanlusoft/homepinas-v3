@@ -3,7 +3,7 @@
 # HomePiNAS - Premium Dashboard for Raspberry Pi CM5
 # Professional One-Liner Installer
 # Optimized for Raspberry Pi OS (ARM64)
-# Version: 1.5.4 (Security Hardened Edition)
+# Version: 1.5.5 (Security Hardened Edition)
 
 set -e
 
@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${BLUE}=========================================${NC}"
-echo -e "${BLUE}   HomePiNAS v1.5.4 Secure Installer    ${NC}"
+echo -e "${BLUE}   HomePiNAS v1.5.5 Secure Installer    ${NC}"
 echo -e "${BLUE}   Security Hardened Edition            ${NC}"
 echo -e "${BLUE}=========================================${NC}"
 
@@ -265,14 +265,16 @@ if [ -f "$CONFIG_FILE" ]; then
     fi
 fi
 
-# Create fan control script (custom for EMC2305)
-echo -e "${BLUE}Creating fan control script...${NC}"
+# Create fan control script (custom for EMC2305) with hysteresis
+echo -e "${BLUE}Creating fan control script with hysteresis...${NC}"
 cat > "$FANCTL_SCRIPT" <<'FANEOF'
 #!/bin/bash
 # HomePiNAS Fan Control Script for EMC2305
 # Controls PWM fans based on CPU and disk temperatures
+# Version 1.5.5: Added hysteresis to prevent fan speed oscillation
 
 CONFIG_FILE="/usr/local/bin/homepinas-fanctl.conf"
+STATE_FILE="/tmp/homepinas-fanctl.state"
 
 # Default values (BALANCED)
 MIN_PWM1=65
@@ -287,9 +289,22 @@ PWM2_T50=120
 PWM2_T60=170
 PWM2_TMAX=255
 
+# Hysteresis settings (degrees Celsius)
+# Fan speed only decreases when temp drops below threshold minus hysteresis
+HYST_TEMP=3
+
 # Load config if exists (use . instead of source for POSIX compatibility)
 if [ -f "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
+fi
+
+# Load previous state (last PWM values and temps)
+LAST_PWM1=0
+LAST_PWM2=0
+LAST_TEMP1=0
+LAST_CPU_TEMP=0
+if [ -f "$STATE_FILE" ]; then
+    . "$STATE_FILE"
 fi
 
 # Find EMC2305 hwmon path
@@ -331,33 +346,70 @@ if [ "$CPU_TEMP" -gt "$TEMP1" ]; then
     TEMP1=$CPU_TEMP
 fi
 
-# Calculate PWM1 based on temperature thresholds
-if [ "$TEMP1" -ge 45 ]; then
-    PWM1=$PWM1_TMAX
-elif [ "$TEMP1" -ge 40 ]; then
-    PWM1=$PWM1_T45
-elif [ "$TEMP1" -ge 35 ]; then
-    PWM1=$PWM1_T40
-elif [ "$TEMP1" -ge 30 ]; then
-    PWM1=$PWM1_T35
-else
-    PWM1=$PWM1_T30
-fi
-if [ "$PWM1" -lt "$MIN_PWM1" ]; then
-    PWM1=$MIN_PWM1
+# Function to calculate PWM1 based on temperature
+calc_pwm1() {
+    local temp=$1
+    if [ "$temp" -ge 45 ]; then
+        echo $PWM1_TMAX
+    elif [ "$temp" -ge 40 ]; then
+        echo $PWM1_T45
+    elif [ "$temp" -ge 35 ]; then
+        echo $PWM1_T40
+    elif [ "$temp" -ge 30 ]; then
+        echo $PWM1_T35
+    else
+        echo $PWM1_T30
+    fi
+}
+
+# Function to calculate PWM2 based on CPU temperature
+calc_pwm2() {
+    local temp=$1
+    if [ "$temp" -ge 70 ]; then
+        echo $PWM2_TMAX
+    elif [ "$temp" -ge 60 ]; then
+        echo $PWM2_T60
+    elif [ "$temp" -ge 50 ]; then
+        echo $PWM2_T50
+    elif [ "$temp" -ge 40 ]; then
+        echo $PWM2_T40
+    else
+        echo $MIN_PWM2
+    fi
+}
+
+# Calculate target PWM values
+TARGET_PWM1=$(calc_pwm1 $TEMP1)
+TARGET_PWM2=$(calc_pwm2 $CPU_TEMP)
+
+# Apply hysteresis: only allow decrease if temperature dropped significantly
+# For PWM1 (disk/general fan)
+if [ "$TARGET_PWM1" -lt "$LAST_PWM1" ]; then
+    # Temperature is suggesting lower speed - check hysteresis
+    TEMP1_WITH_HYST=$((TEMP1 + HYST_TEMP))
+    HYST_PWM1=$(calc_pwm1 $TEMP1_WITH_HYST)
+    if [ "$HYST_PWM1" -ge "$LAST_PWM1" ]; then
+        # Temperature hasn't dropped enough, keep current speed
+        TARGET_PWM1=$LAST_PWM1
+    fi
 fi
 
-# Calculate PWM2 based on CPU temperature
-if [ "$CPU_TEMP" -ge 70 ]; then
-    PWM2=$PWM2_TMAX
-elif [ "$CPU_TEMP" -ge 60 ]; then
-    PWM2=$PWM2_T60
-elif [ "$CPU_TEMP" -ge 50 ]; then
-    PWM2=$PWM2_T50
-elif [ "$CPU_TEMP" -ge 40 ]; then
-    PWM2=$PWM2_T40
-else
-    PWM2=$MIN_PWM2
+# For PWM2 (CPU fan)
+if [ "$TARGET_PWM2" -lt "$LAST_PWM2" ]; then
+    # Temperature is suggesting lower speed - check hysteresis
+    CPU_TEMP_WITH_HYST=$((CPU_TEMP + HYST_TEMP))
+    HYST_PWM2=$(calc_pwm2 $CPU_TEMP_WITH_HYST)
+    if [ "$HYST_PWM2" -ge "$LAST_PWM2" ]; then
+        # Temperature hasn't dropped enough, keep current speed
+        TARGET_PWM2=$LAST_PWM2
+    fi
+fi
+
+# Ensure minimum values
+PWM1=$TARGET_PWM1
+PWM2=$TARGET_PWM2
+if [ "$PWM1" -lt "$MIN_PWM1" ]; then
+    PWM1=$MIN_PWM1
 fi
 if [ "$PWM2" -lt "$MIN_PWM2" ]; then
     PWM2=$MIN_PWM2
@@ -367,7 +419,21 @@ fi
 echo $PWM1 > "$HWMON/pwm1" 2>/dev/null
 echo $PWM2 > "$HWMON/pwm2" 2>/dev/null
 
-echo "CPU: ${CPU_TEMP}C, Disk: ${DISK_TEMP}C -> PWM1: $PWM1, PWM2: $PWM2"
+# Save state for next iteration
+cat > "$STATE_FILE" <<EOF
+LAST_PWM1=$PWM1
+LAST_PWM2=$PWM2
+LAST_TEMP1=$TEMP1
+LAST_CPU_TEMP=$CPU_TEMP
+EOF
+
+# Log output (with hysteresis indicator if applied)
+HYST_IND1=""
+HYST_IND2=""
+[ "$PWM1" -eq "$LAST_PWM1" ] && [ "$TARGET_PWM1" -ne "$LAST_PWM1" ] 2>/dev/null && HYST_IND1=" [H]"
+[ "$PWM2" -eq "$LAST_PWM2" ] && [ "$TARGET_PWM2" -ne "$LAST_PWM2" ] 2>/dev/null && HYST_IND2=" [H]"
+
+echo "CPU: ${CPU_TEMP}C, Disk: ${DISK_TEMP}C -> PWM1: ${PWM1}${HYST_IND1}, PWM2: ${PWM2}${HYST_IND2}"
 FANEOF
 
 if [ -f "$FANCTL_SCRIPT" ]; then
@@ -379,6 +445,7 @@ if [ -f "$FANCTL_SCRIPT" ]; then
 # =========================================
 # HomePinas Fan Control - BALANCED preset
 # Recommended default settings
+# v1.5.5 with hysteresis support
 # =========================================
 
 # PWM1 (HDD / SSD)
@@ -399,10 +466,9 @@ MIN_PWM1=65
 MIN_PWM2=80
 MAX_PWM=255
 
-CPU_FAILSAFE_C=80
-FAST_FAILSAFE_C=70
-
-HYST_PWM=10
+# Hysteresis: 3C is balanced between stability and responsiveness
+# Fans won't slow down until temperature drops 3C below threshold
+HYST_TEMP=3
 EOF
     fi
 
@@ -607,7 +673,7 @@ systemctl enable homepinas-snapraid-sync.timer || true
 
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}    SECURE INSTALLATION COMPLETE!       ${NC}"
-echo -e "${GREEN}      HomePiNAS v1.5.4                  ${NC}"
+echo -e "${GREEN}      HomePiNAS v1.5.5                  ${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo -e ""
 IP_ADDR=$(hostname -I | awk '{print $1}')
@@ -626,7 +692,7 @@ echo -e "  - ${GREEN}Persistent sessions${NC} (SQLite-backed)"
 echo -e "  - Rate limiting protection"
 echo -e "  - Input sanitization (command injection protection)"
 echo -e "  - Restricted sudoers permissions"
-echo -e "  - Fan control with PWM curves"
+echo -e "  - Fan control with PWM curves and ${GREEN}hysteresis${NC}"
 echo -e "  - ${GREEN}SnapRAID${NC} parity protection"
 echo -e "  - ${GREEN}MergerFS${NC} disk pooling"
 echo -e "  - ${GREEN}Samba${NC} network file sharing"

@@ -13,7 +13,7 @@ const Database = require('better-sqlite3');
 const app = express();
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 const PORT = process.env.PORT || 3001;
-const VERSION = '1.5.4';
+const VERSION = '1.5.5';
 const DATA_FILE = path.join(__dirname, 'config', 'data.json');
 const SESSION_DB_PATH = path.join(__dirname, 'config', 'sessions.db');
 const SALT_ROUNDS = 12;
@@ -557,12 +557,13 @@ app.post('/api/system/fan', requireAuth, (req, res) => {
     }
 });
 
-// Fan mode presets configuration
+// Fan mode presets configuration (v1.5.5 with hysteresis)
 const FANCTL_CONF = '/usr/local/bin/homepinas-fanctl.conf';
 const FAN_PRESETS = {
     silent: `# =========================================
 # HomePinas Fan Control - SILENT preset
 # Quiet operation, higher temperatures allowed
+# v1.5.5 with hysteresis support
 # =========================================
 
 PWM1_T30=60
@@ -580,14 +581,14 @@ MIN_PWM1=60
 MIN_PWM2=70
 MAX_PWM=255
 
-CPU_FAILSAFE_C=80
-FAST_FAILSAFE_C=70
-
-HYST_PWM=20
+# Hysteresis: 5C means fans won't slow down until temp drops 5C below threshold
+# Higher value = more stable fan speed, but slower response to cooling
+HYST_TEMP=5
 `,
     balanced: `# =========================================
 # HomePinas Fan Control - BALANCED preset
 # Recommended default settings
+# v1.5.5 with hysteresis support
 # =========================================
 
 # PWM1 (HDD / SSD)
@@ -608,14 +609,13 @@ MIN_PWM1=65
 MIN_PWM2=80
 MAX_PWM=255
 
-CPU_FAILSAFE_C=80
-FAST_FAILSAFE_C=70
-
-HYST_PWM=10
+# Hysteresis: 3C is balanced between stability and responsiveness
+HYST_TEMP=3
 `,
     performance: `# =========================================
 # HomePinas Fan Control - PERFORMANCE preset
 # Cooling first, louder fans
+# v1.5.5 with hysteresis support
 # =========================================
 
 PWM1_T30=80
@@ -633,10 +633,8 @@ MIN_PWM1=80
 MIN_PWM2=120
 MAX_PWM=255
 
-CPU_FAILSAFE_C=80
-FAST_FAILSAFE_C=70
-
-HYST_PWM=5
+# Hysteresis: 2C for quick response to temperature changes
+HYST_TEMP=2
 `
 };
 
