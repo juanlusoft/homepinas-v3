@@ -88,8 +88,13 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.static(path.join(__dirname, '../')));
 app.use('/frontend', express.static(path.join(__dirname, '../frontend')));
 
-// Serve index.html on root
-app.get('/', (req, res) => {
+// SPA catch-all route - serve index.html for all non-API routes
+app.get('*', (req, res, next) => {
+    // Skip API routes
+    if (req.path.startsWith('/api')) return next();
+    // Skip static files
+    if (path.extname(req.path)) return next();
+    // Serve SPA for all other routes
     res.sendFile(path.join(__dirname, '../index.html'));
 });
 

@@ -92,6 +92,56 @@ const viewsMap = {
     'system': 'System Administration'
 };
 
+// =============================================================================
+// URL ROUTING
+// =============================================================================
+
+/**
+ * Navigate to a URL path and update browser history
+ */
+function navigateTo(path, replace = false) {
+    if (replace) {
+        history.replaceState({ path }, '', path);
+    } else {
+        history.pushState({ path }, '', path);
+    }
+}
+
+/**
+ * Get view name from URL path
+ */
+function getViewFromPath(path) {
+    const cleanPath = path.replace(/^//, '').split('?')[0];
+    if (!cleanPath || cleanPath === 'home' || cleanPath === 'dashboard') return 'dashboard';
+    if (viewsMap[cleanPath]) return cleanPath;
+    return 'dashboard';
+}
+
+/**
+ * Handle route change from URL
+ */
+function handleRouteChange() {
+    const path = window.location.pathname;
+    const view = getViewFromPath(path);
+
+    // Update sidebar active state
+    navLinks.forEach(link => {
+        link.classList.toggle('active', link.dataset.view === view);
+    });
+
+    // Update title and render
+    if (viewTitle) viewTitle.textContent = viewsMap[view] || 'HomePiNAS';
+    renderContent(view);
+    updateHeaderIPVisibility();
+}
+
+// Listen for browser back/forward
+window.addEventListener('popstate', () => {
+    if (state.isAuthenticated) {
+        handleRouteChange();
+    }
+});
+
 const setupForm = document.getElementById('setup-form');
 const loginForm = document.getElementById('login-form');
 const navLinks = document.querySelectorAll('.nav-links li');
@@ -131,6 +181,15 @@ async function initAuth() {
         if (state.sessionId && state.user && state.storageConfig.length > 0) {
             state.isAuthenticated = true;
             switchView('dashboard');
+
+            // Check URL and navigate to correct view
+            const urlPath = window.location.pathname;
+            if (urlPath && urlPath !== '/' && urlPath !== '/login' && urlPath !== '/setup') {
+                const urlView = getViewFromPath(urlPath);
+                if (urlView !== 'dashboard') {
+                    handleRouteChange();
+                }
+            }
         } else if (state.user && state.storageConfig.length > 0) {
             switchView('login');
         } else if (state.user) {
@@ -626,6 +685,11 @@ navLinks.forEach(link => {
         navLinks.forEach(l => l.classList.remove('active'));
         link.classList.add('active');
         const view = link.dataset.view;
+
+        // Update URL
+        const path = view === 'dashboard' ? '/' : '/' + view;
+        navigateTo(path);
+
         viewTitle.textContent = viewsMap[view] || 'HomePiNAS';
         renderContent(view);
         updateHeaderIPVisibility();
