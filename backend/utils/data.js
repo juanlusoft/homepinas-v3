@@ -20,7 +20,7 @@ const initialState = {
             { id: 'wlan0', name: 'Wi-Fi', ip: '192.168.1.105', subnet: '255.255.255.0', gateway: '192.168.1.1', dns: '1.1.1.1', dhcp: true, status: 'disconnected' }
         ],
         ddns: [
-            { id: 'duckdns-1', service: 'duckdns', name: 'DuckDNS', enabled: true, domain: 'homepinas.duckdns.org', status: 'online' }
+            
         ]
     }
 };

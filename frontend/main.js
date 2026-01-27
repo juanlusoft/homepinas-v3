@@ -244,6 +244,9 @@ function switchView(viewName) {
     if (views[viewName]) {
         views[viewName].classList.add('active');
         if (viewName === 'dashboard') renderContent('dashboard');
+        // Update username display
+        const usernameEl = document.getElementById("username-display");
+        if (usernameEl && state.user) usernameEl.textContent = state.user.username || "Admin";
     }
     updateHeaderIPVisibility();
 }
@@ -2234,6 +2237,20 @@ if (resetBtn) {
             alert(e.message || 'Reset Error: Communications Broken');
             resetBtn.textContent = 'Reset Setup & Data';
             resetBtn.disabled = false;
+        }
+    });
+}
+
+
+// Logout handler
+const logoutBtn = document.getElementById("logout-btn");
+if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+        if (confirm("Are you sure you want to logout?")) {
+            clearSession();
+            state.isAuthenticated = false;
+            state.user = null;
+            window.location.reload();
         }
     });
 }
