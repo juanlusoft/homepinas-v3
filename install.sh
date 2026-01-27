@@ -7,6 +7,9 @@
 
 set -e
 
+# Version - CHANGE THIS FOR EACH RELEASE
+VERSION="1.8.0"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -15,7 +18,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${BLUE}=========================================${NC}"
-echo -e "${BLUE}   HomePiNAS v1.8.0 Secure Installer    ${NC}"
+echo -e "${BLUE}   HomePiNAS v${VERSION} Secure Installer    ${NC}"
 echo -e "${BLUE}   Homelabs.club Edition                ${NC}"
 echo -e "${BLUE}=========================================${NC}"
 
@@ -673,7 +676,7 @@ systemctl enable homepinas-snapraid-sync.timer || true
 
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}    SECURE INSTALLATION COMPLETE!       ${NC}"
-echo -e "${GREEN}      HomePiNAS v1.8.0                  ${NC}"
+echo -e "${GREEN}      HomePiNAS v${VERSION}                  ${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo -e ""
 IP_ADDR=$(hostname -I | awk '{print $1}')
