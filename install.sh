@@ -3,7 +3,7 @@
 # HomePiNAS - Premium Dashboard for Raspberry Pi CM5
 # Professional One-Liner Installer
 # Optimized for Raspberry Pi OS (ARM64)
-# Version: 1.6.0 (Security Hardened Edition)
+# Version: 1.6.0 (Homelabs.club Edition)
 
 set -e
 
@@ -16,7 +16,7 @@ NC='\033[0m'
 
 echo -e "${BLUE}=========================================${NC}"
 echo -e "${BLUE}   HomePiNAS v1.6.0 Secure Installer    ${NC}"
-echo -e "${BLUE}   Security Hardened Edition            ${NC}"
+echo -e "${BLUE}   Homelabs.club Edition                ${NC}"
 echo -e "${BLUE}=========================================${NC}"
 
 # Check for root

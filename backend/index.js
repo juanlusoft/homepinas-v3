@@ -2,7 +2,7 @@
  * HomePiNAS - Premium NAS Dashboard for Raspberry Pi CM5
  * v1.6.0 - Security Hardening
  *
- * Security Hardened Edition with:
+ * Homelabs.club Edition with:
  * - Bcrypt password hashing
  * - SQLite-backed persistent sessions
  * - Rate limiting protection
@@ -126,7 +126,7 @@ console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                    HomePiNAS v${VERSION}                      ║
 ║           Premium NAS Dashboard for Raspberry Pi          ║
-║                 Security Hardened Edition                 ║
+║                   Homelabs.club Edition                   ║
 ╚═══════════════════════════════════════════════════════════╝
 `);
 

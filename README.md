@@ -1,6 +1,6 @@
 # HomePiNAS v1.5.8
 
-Premium NAS Dashboard for Raspberry Pi CM5 - Security Hardened Edition
+Premium NAS Dashboard for Raspberry Pi CM5 - Homelabs.club Edition
 
 ## Features
 
