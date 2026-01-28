@@ -164,6 +164,12 @@ body {
     color: var(--primary);
 }
 
+.sidebar-logo img {
+    max-width: 100%;
+    height: auto;
+    max-height: 40px;
+}
+
 .nav-links {
     list-style: none;
     flex-grow: 1;

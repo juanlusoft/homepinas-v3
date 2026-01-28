@@ -18,6 +18,9 @@ const state = {
 
 const API_BASE = window.location.origin + '/api';
 
+// Local state for DHCP overrides (to track user changes before saving)
+const localDhcpState = {};
+
 // Security: HTML escape function to prevent XSS
 function escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
@@ -1719,16 +1722,21 @@ async function renderNetworkManager() {
     const ifaceSection = document.createElement('div');
     const ifaceTitle = document.createElement('h3');
     ifaceTitle.textContent = 'CM5 Network Adapters';
+    ifaceTitle.style.marginBottom = '20px';
     ifaceSection.appendChild(ifaceTitle);
+
+    // Grid container for interface cards
+    const interfacesGrid = document.createElement('div');
+    interfacesGrid.className = 'interfaces-grid';
 
     state.network.interfaces.forEach(iface => {
         const card = document.createElement('div');
         card.className = 'glass-card interface-card';
-        card.style.marginBottom = '20px';
         card.dataset.interfaceId = iface.id;
 
         const isConnected = iface.status === 'connected';
-        const isDhcp = iface.dhcp;
+        // Use local state if available, otherwise use server state
+        const isDhcp = localDhcpState[iface.id] !== undefined ? localDhcpState[iface.id] : iface.dhcp;
 
         // Create header
         const header = document.createElement('div');
@@ -1750,7 +1758,7 @@ async function renderNetworkManager() {
         dhcpCheckbox.type = 'checkbox';
         dhcpCheckbox.id = `dhcp-${iface.id}`;
         dhcpCheckbox.checked = isDhcp;
-        dhcpCheckbox.addEventListener('change', () => toggleDHCP(iface.id));
+        dhcpCheckbox.addEventListener('change', (e) => toggleDHCP(iface.id, e.target.checked, iface));
 
         const dhcpLabel = document.createElement('label');
         dhcpLabel.htmlFor = `dhcp-${iface.id}`;
@@ -1765,6 +1773,7 @@ async function renderNetworkManager() {
         // Create form
         const netForm = document.createElement('div');
         netForm.className = 'net-form';
+        netForm.id = `netform-${iface.id}`;
 
         if (isDhcp) {
             const inputGroup = document.createElement('div');
@@ -1829,8 +1838,10 @@ async function renderNetworkManager() {
 
         card.appendChild(header);
         card.appendChild(netForm);
-        ifaceSection.appendChild(card);
+        interfacesGrid.appendChild(card);
     });
+
+    ifaceSection.appendChild(interfacesGrid);
 
     // 2. DDNS Section
     const ddnsSection = document.createElement('div');
@@ -1919,10 +1930,82 @@ async function renderNetworkManager() {
     dashboardContent.appendChild(container);
 }
 
-// Network functions (previously missing)
-function toggleDHCP(interfaceId) {
-    // Re-render the network manager to update the form
-    renderContent('network');
+// Network functions
+function toggleDHCP(interfaceId, isChecked, iface) {
+    // Update local state
+    localDhcpState[interfaceId] = isChecked;
+
+    // Re-render only the form for this interface
+    const netForm = document.getElementById(`netform-${interfaceId}`);
+    if (netForm) {
+        renderNetForm(netForm, iface, isChecked);
+    }
+}
+
+// Helper function to render the network form
+function renderNetForm(netForm, iface, isDhcp) {
+    netForm.innerHTML = '';
+
+    if (isDhcp) {
+        const inputGroup = document.createElement('div');
+        inputGroup.className = 'input-group';
+        inputGroup.style.gridColumn = '1 / -1';
+
+        const ipInput = document.createElement('input');
+        ipInput.type = 'text';
+        ipInput.value = iface.ip || '';
+        ipInput.disabled = true;
+        ipInput.placeholder = ' ';
+
+        const label = document.createElement('label');
+        label.textContent = 'Hardware Assigned IP';
+
+        inputGroup.appendChild(ipInput);
+        inputGroup.appendChild(label);
+        netForm.appendChild(inputGroup);
+    } else {
+        // IP Input
+        const ipGroup = document.createElement('div');
+        ipGroup.className = 'input-group';
+        const ipInput = document.createElement('input');
+        ipInput.type = 'text';
+        ipInput.id = `ip-${iface.id}`;
+        ipInput.value = iface.ip || '';
+        ipInput.placeholder = ' ';
+        const ipLabel = document.createElement('label');
+        ipLabel.textContent = 'IP Address';
+        ipGroup.appendChild(ipInput);
+        ipGroup.appendChild(ipLabel);
+
+        // Subnet Input
+        const subnetGroup = document.createElement('div');
+        subnetGroup.className = 'input-group';
+        const subnetInput = document.createElement('input');
+        subnetInput.type = 'text';
+        subnetInput.id = `subnet-${iface.id}`;
+        subnetInput.value = iface.subnet || '';
+        subnetInput.placeholder = ' ';
+        const subnetLabel = document.createElement('label');
+        subnetLabel.textContent = 'Subnet Mask';
+        subnetGroup.appendChild(subnetInput);
+        subnetGroup.appendChild(subnetLabel);
+
+        netForm.appendChild(ipGroup);
+        netForm.appendChild(subnetGroup);
+    }
+
+    // Save button
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display: flex; align-items: flex-end; padding-top: 10px; grid-column: 1 / -1;';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn-primary';
+    saveBtn.style.cssText = 'padding: 10px; width: 100%;';
+    saveBtn.textContent = 'Save to Node';
+    saveBtn.addEventListener('click', () => applyNetwork(iface.id));
+
+    btnContainer.appendChild(saveBtn);
+    netForm.appendChild(btnContainer);
 }
 
 async function applyNetwork(interfaceId) {
