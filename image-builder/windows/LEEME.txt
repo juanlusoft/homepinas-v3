@@ -1,0 +1,62 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    HomePiNAS Image Builder para Windows                       ║
+║                         Homelabs.club Edition v2.0                            ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+INSTRUCCIONES DE USO
+════════════════════
+
+1. Descarga la imagen de Raspberry Pi OS desde:
+   https://www.raspberrypi.com/software/operating-systems/
+
+   Recomendado: Raspberry Pi OS Lite (64-bit)
+
+2. Haz doble clic en "HomePiNAS-ImageBuilder.bat"
+   (Se abrirá una ventana pidiendo permisos de Administrador - Acepta)
+
+3. Selecciona la imagen descargada (.img, .img.xz o .zip)
+
+4. Espera a que se procese (1-2 minutos)
+
+5. Graba la imagen resultante (*-homepinas.img) en una SD con:
+   - Raspberry Pi Imager (https://www.raspberrypi.com/software/)
+   - balenaEtcher (https://www.balena.io/etcher/)
+
+6. Inserta la SD en tu Raspberry Pi y enciéndela
+
+7. HomePiNAS se instalará automáticamente en el primer arranque
+   (Esto tarda 5-15 minutos dependiendo de tu conexión a internet)
+
+8. Accede al dashboard en: https://<ip-de-tu-raspberry>:3001
+
+
+REQUISITOS
+══════════
+
+- Windows 10/11
+- Permisos de Administrador
+- Conexión a internet (para descargar 7-Zip si es necesario)
+
+
+SOLUCIÓN DE PROBLEMAS
+═════════════════════
+
+Si la instalación automática falla, puedes instalar manualmente conectándote
+por SSH a tu Raspberry Pi y ejecutando:
+
+   curl -fsSL https://raw.githubusercontent.com/juanlusoft/homepinas-v2/main/install.sh | sudo bash
+
+
+ARCHIVOS INCLUIDOS
+══════════════════
+
+- HomePiNAS-ImageBuilder.bat  → Lanzador (hacer doble clic aquí)
+- HomePiNAS-ImageBuilder.ps1  → Script principal de PowerShell
+- LEEME.txt                   → Este archivo
+
+
+SOPORTE
+═══════
+
+Web: https://homelabs.club
+GitHub: https://github.com/juanlusoft/homepinas-v2
