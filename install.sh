@@ -8,7 +8,7 @@
 set -e
 
 # Version - CHANGE THIS FOR EACH RELEASE
-VERSION="1.8.1"
+VERSION="1.8.2"
 
 # Colors
 RED='\033[0;31m'
@@ -58,14 +58,58 @@ echo -e "${BLUE}[1/7] Preparing environment...${NC}"
 # APT options to suppress all interactive prompts
 APT_OPTS="-o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef"
 
+# Detect Debian version
+DEBIAN_VERSION=""
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    DEBIAN_VERSION="$VERSION_CODENAME"
+fi
+
+echo -e "${BLUE}Detected: $PRETTY_NAME${NC}"
+
 apt-get update || true
 apt-get install -f -y $APT_OPTS
-for pkg in docker.io docker-doc docker-compose podman-docker containerd runc containerd.io; do
-    apt-get purge -y $pkg 2>/dev/null || true
-done
-apt-get autoremove -y $APT_OPTS
-apt-get clean
-apt-get install -y $APT_OPTS git curl sudo smartmontools lm-sensors docker.io parted samba samba-common-bin build-essential python3
+
+# Install Docker from official repo for Trixie, or docker.io for stable releases
+if [ "$DEBIAN_VERSION" = "trixie" ] || [ "$DEBIAN_VERSION" = "sid" ]; then
+    echo -e "${YELLOW}Debian Trixie/Sid detected - using Docker official repository${NC}"
+
+    # Remove conflicting packages
+    for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
+        apt-get purge -y $pkg 2>/dev/null || true
+    done
+
+    # Install prerequisites
+    apt-get install -y $APT_OPTS ca-certificates curl gnupg
+
+    # Add Docker's official GPG key
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Add Docker repo (use bookworm for trixie since docker doesn't have trixie yet)
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+
+    apt-get update
+
+    # Install Docker CE
+    apt-get install -y $APT_OPTS docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    # Install other packages (git, sensors, etc might have different names in trixie)
+    apt-get install -y $APT_OPTS git curl sudo smartmontools parted samba samba-common-bin build-essential python3 || true
+
+    # Try lm-sensors (might be lm-sensors or sensors package in trixie)
+    apt-get install -y $APT_OPTS lm-sensors 2>/dev/null || apt-get install -y $APT_OPTS sensors 2>/dev/null || echo -e "${YELLOW}Warning: lm-sensors not available${NC}"
+
+else
+    # Standard Debian stable (bookworm, bullseye, etc)
+    for pkg in docker.io docker-doc docker-compose podman-docker containerd runc containerd.io; do
+        apt-get purge -y $pkg 2>/dev/null || true
+    done
+    apt-get autoremove -y $APT_OPTS
+    apt-get clean
+    apt-get install -y $APT_OPTS git curl sudo smartmontools lm-sensors docker.io parted samba samba-common-bin build-essential python3
+fi
 
 # 2. Install SnapRAID + MergerFS
 echo -e "${BLUE}[2/7] Installing SnapRAID + MergerFS...${NC}"
@@ -73,15 +117,39 @@ echo -e "${BLUE}[2/7] Installing SnapRAID + MergerFS...${NC}"
 # Install MergerFS
 if ! command -v mergerfs &> /dev/null; then
     echo -e "${BLUE}Installing MergerFS...${NC}"
-    # Get latest mergerfs release for arm64
+    # Get latest mergerfs release
     MERGERFS_VERSION=$(curl -s https://api.github.com/repos/trapexit/mergerfs/releases/latest | grep -oP '"tag_name": "\K[^"]+')
     if [ -z "$MERGERFS_VERSION" ]; then
-        MERGERFS_VERSION="1.8.1"
+        MERGERFS_VERSION="2.40.2"
     fi
-    MERGERFS_DEB="mergerfs_${MERGERFS_VERSION}.debian-bookworm_arm64.deb"
+
+    # Detect architecture
+    ARCH=$(dpkg --print-architecture)
+    echo -e "${BLUE}Architecture: $ARCH${NC}"
+
+    # Determine correct package name based on distro and arch
+    MERGERFS_DISTRO="debian-bookworm"
+    if [ "$DEBIAN_VERSION" = "trixie" ] || [ "$DEBIAN_VERSION" = "sid" ]; then
+        # Try trixie first, fall back to bookworm
+        MERGERFS_DISTRO="debian-trixie"
+    fi
+
+    MERGERFS_DEB="mergerfs_${MERGERFS_VERSION}.${MERGERFS_DISTRO}_${ARCH}.deb"
+    echo -e "${BLUE}Downloading MergerFS: $MERGERFS_DEB${NC}"
+
     curl -L -o /tmp/mergerfs.deb "https://github.com/trapexit/mergerfs/releases/download/${MERGERFS_VERSION}/${MERGERFS_DEB}" || {
-        # Fallback to apt if GitHub download fails
-        apt-get install -y $APT_OPTS mergerfs || echo -e "${YELLOW}MergerFS installation from apt${NC}"
+        # If trixie package doesn't exist, try bookworm
+        if [ "$MERGERFS_DISTRO" = "debian-trixie" ]; then
+            echo -e "${YELLOW}Trixie package not found, trying bookworm...${NC}"
+            MERGERFS_DEB="mergerfs_${MERGERFS_VERSION}.debian-bookworm_${ARCH}.deb"
+            curl -L -o /tmp/mergerfs.deb "https://github.com/trapexit/mergerfs/releases/download/${MERGERFS_VERSION}/${MERGERFS_DEB}" || {
+                # Fallback to apt if GitHub download fails
+                apt-get install -y $APT_OPTS mergerfs || echo -e "${YELLOW}MergerFS installation from apt${NC}"
+            }
+        else
+            # Fallback to apt if GitHub download fails
+            apt-get install -y $APT_OPTS mergerfs || echo -e "${YELLOW}MergerFS installation from apt${NC}"
+        fi
     }
     if [ -f /tmp/mergerfs.deb ]; then
         dpkg -i /tmp/mergerfs.deb || apt-get install -f -y $APT_OPTS
@@ -97,9 +165,11 @@ if ! command -v snapraid &> /dev/null; then
     apt-get install -y $APT_OPTS snapraid || {
         # Build from source if not in repos
         echo -e "${YELLOW}Building SnapRAID from source...${NC}"
-        apt-get install -y $APT_OPTS build-essential autoconf
+        apt-get install -y $APT_OPTS build-essential autoconf automake
         cd /tmp
-        SNAPRAID_VERSION="1.8.1"
+        # Get latest snapraid version from GitHub
+        SNAPRAID_VERSION=$(curl -s https://api.github.com/repos/amadvance/snapraid/releases/latest | grep -oP '"tag_name": "v\K[^"]+' || echo "12.3")
+        echo -e "${BLUE}Building SnapRAID v${SNAPRAID_VERSION}...${NC}"
         curl -L -o snapraid.tar.gz "https://github.com/amadvance/snapraid/releases/download/v${SNAPRAID_VERSION}/snapraid-${SNAPRAID_VERSION}.tar.gz"
         tar xzf snapraid.tar.gz
         cd snapraid-${SNAPRAID_VERSION}
