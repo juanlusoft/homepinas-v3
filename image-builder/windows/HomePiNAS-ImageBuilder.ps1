@@ -383,6 +383,201 @@ function Start-RpiOsDownload {
     $timer.Start()
 }
 
+function Get-RemovableDrives {
+    $drives = @()
+
+    try {
+        # Get USB disks
+        $usbDisks = Get-Disk | Where-Object {
+            $_.BusType -eq 'USB' -and $_.Size -gt 0
+        }
+
+        foreach ($disk in $usbDisks) {
+            $sizeGB = [math]::Round($disk.Size / 1GB, 1)
+            $drives += @{
+                Number = $disk.Number
+                Name = $disk.FriendlyName
+                Size = $disk.Size
+                SizeText = "${sizeGB} GB"
+                DisplayName = "[$($disk.Number)] $($disk.FriendlyName) - ${sizeGB} GB"
+            }
+        }
+    } catch {
+        Write-Log "Error detectando unidades: $_" "Error"
+    }
+
+    return $drives
+}
+
+function Update-DriveList {
+    $script:DriveComboBox.Items.Clear()
+    $script:RemovableDrives = Get-RemovableDrives
+
+    if ($script:RemovableDrives.Count -eq 0) {
+        $script:DriveComboBox.Items.Add("No se detectaron unidades USB")
+        $script:DriveComboBox.SelectedIndex = 0
+        $script:BurnButton.Enabled = $false
+    } else {
+        foreach ($drive in $script:RemovableDrives) {
+            $script:DriveComboBox.Items.Add($drive.DisplayName)
+        }
+        $script:DriveComboBox.SelectedIndex = 0
+        $script:BurnButton.Enabled = $script:ProcessedImagePath -ne $null
+    }
+}
+
+function Write-ImageToDrive {
+    param(
+        [string]$ImagePath,
+        [int]$DiskNumber
+    )
+
+    $script:BurnButton.Enabled = $false
+    $script:RefreshButton.Enabled = $false
+    $script:SelectButton.Enabled = $false
+    $script:DownloadButton.Enabled = $false
+    $script:ProcessButton.Enabled = $false
+
+    # Confirm with user
+    $disk = Get-Disk -Number $DiskNumber
+    $sizeGB = [math]::Round($disk.Size / 1GB, 1)
+
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+        "ATENCION: Se borraran TODOS los datos en:`n`n$($disk.FriendlyName) ($sizeGB GB)`n`nDisco numero: $DiskNumber`n`n¿Continuar?",
+        "Confirmar grabacion",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+
+    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+        Write-Log "Grabacion cancelada por el usuario" "Warning"
+        $script:BurnButton.Enabled = $true
+        $script:RefreshButton.Enabled = $true
+        $script:SelectButton.Enabled = $true
+        $script:DownloadButton.Enabled = $true
+        return
+    }
+
+    Write-Log "Iniciando grabacion en disco $DiskNumber..." "Info"
+    Update-Progress -Percent 5 -Status "Preparando disco..."
+
+    $burnJob = Start-Job -ScriptBlock {
+        param($ImagePath, $DiskNumber)
+
+        try {
+            $result = @{ Success = $false; Error = "" }
+
+            # Clear the disk
+            Clear-Disk -Number $DiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction Stop
+
+            # Get image size
+            $imageSize = (Get-Item $ImagePath).Length
+            $imageSizeGB = [math]::Round($imageSize / 1GB, 2)
+
+            # Open source and destination
+            $sourceStream = [System.IO.File]::OpenRead($ImagePath)
+            $diskPath = "\\.\PhysicalDrive$DiskNumber"
+
+            # Open disk for raw write
+            $diskHandle = [System.IO.File]::Open(
+                $diskPath,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Write,
+                [System.IO.FileShare]::None
+            )
+
+            # Write in chunks
+            $bufferSize = 4MB
+            $buffer = New-Object byte[] $bufferSize
+            $totalWritten = 0
+
+            while (($bytesRead = $sourceStream.Read($buffer, 0, $bufferSize)) -gt 0) {
+                $diskHandle.Write($buffer, 0, $bytesRead)
+                $totalWritten += $bytesRead
+            }
+
+            # Cleanup
+            $diskHandle.Flush()
+            $diskHandle.Close()
+            $sourceStream.Close()
+
+            # Refresh disk
+            Update-Disk -Number $DiskNumber -ErrorAction SilentlyContinue
+
+            $result.Success = $true
+            $result.TotalWritten = $totalWritten
+            return $result
+
+        } catch {
+            return @{
+                Success = $false
+                Error = $_.Exception.Message
+            }
+        }
+    } -ArgumentList $ImagePath, $DiskNumber
+
+    # Monitor burn progress
+    $timer = New-Object System.Windows.Forms.Timer
+    $timer.Interval = 1000
+    $script:burnProgress = 5
+
+    $timer.Add_Tick({
+        if ($burnJob.State -eq "Completed") {
+            $timer.Stop()
+            $result = Receive-Job -Job $burnJob
+            Remove-Job -Job $burnJob
+
+            if ($result.Success) {
+                Update-Progress -Percent 100 -Status "Grabacion completada!"
+                Write-Log "=" * 50 "Info"
+                Write-Log "IMAGEN GRABADA EXITOSAMENTE" "Success"
+                Write-Log "=" * 50 "Info"
+                Write-Log "Bytes escritos: $($result.TotalWritten)" "Info"
+                Write-Log "" "Info"
+                Write-Log "Retira la SD e insertala en tu Raspberry Pi" "Success"
+
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Imagen grabada correctamente!`n`nRetira la tarjeta SD e insertala en tu Raspberry Pi.`n`nHomePiNAS se instalara automaticamente en el primer arranque.",
+                    "Grabacion Completada",
+                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Information
+                )
+            } else {
+                Update-Progress -Percent 0 -Status "Error en grabacion"
+                Write-Log "ERROR: $($result.Error)" "Error"
+
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Error grabando imagen:`n`n$($result.Error)",
+                    "Error de Grabacion",
+                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Error
+                )
+            }
+
+            $script:BurnButton.Enabled = $true
+            $script:RefreshButton.Enabled = $true
+            $script:SelectButton.Enabled = $true
+            $script:DownloadButton.Enabled = $true
+            Update-DriveList
+        }
+        elseif ($burnJob.State -eq "Running") {
+            $script:burnProgress += 3
+            if ($script:burnProgress > 95) { $script:burnProgress = 95 }
+            Update-Progress -Percent $script:burnProgress -Status "Grabando imagen en SD/USB..."
+        }
+        elseif ($burnJob.State -eq "Failed") {
+            $timer.Stop()
+            Write-Log "Error en la grabacion" "Error"
+            $script:BurnButton.Enabled = $true
+            $script:RefreshButton.Enabled = $true
+            $script:SelectButton.Enabled = $true
+            $script:DownloadButton.Enabled = $true
+        }
+    })
+
+    $timer.Start()
+}
+
 function Expand-CompressedImage {
     param([string]$Path)
 
@@ -585,6 +780,8 @@ function Start-ImageProcessing {
 
     $script:ProcessButton.Enabled = $false
     $script:SelectButton.Enabled = $false
+    $script:DownloadButton.Enabled = $false
+    $script:BurnButton.Enabled = $false
     $script:LogTextBox.Clear()
 
     Write-Log "Iniciando procesamiento de imagen..." "Info"
@@ -734,14 +931,18 @@ fi
                 Write-Log "=" * 50 "Info"
                 Write-Log "Archivo: $($result.OutputPath)" "Success"
                 Write-Log "" "Info"
-                Write-Log "Siguientes pasos:" "Info"
-                Write-Log "1. Graba la imagen en una SD con Raspberry Pi Imager" "Info"
-                Write-Log "2. Inserta la SD en tu Raspberry Pi" "Info"
-                Write-Log "3. HomePiNAS se instalara automaticamente" "Info"
-                Write-Log "4. Accede a: https://<ip-raspberry>:3001" "Info"
+                Write-Log "Ahora puedes grabar la imagen en una SD/USB (paso 4)" "Info"
+
+                # Save processed image path for burning
+                $script:ProcessedImagePath = $result.OutputPath
+
+                # Enable burn button if drives available
+                if ($script:RemovableDrives.Count -gt 0) {
+                    $script:BurnButton.Enabled = $true
+                }
 
                 [System.Windows.Forms.MessageBox]::Show(
-                    "Imagen creada exitosamente!`n`nArchivo:`n$($result.OutputPath)`n`nGrabala en una SD y arranca tu Raspberry Pi.",
+                    "Imagen creada exitosamente!`n`nArchivo:`n$($result.OutputPath)`n`nAhora puedes grabarla en una SD/USB usando el paso 4.",
                     "HomePiNAS Image Builder",
                     [System.Windows.Forms.MessageBoxButtons]::OK,
                     [System.Windows.Forms.MessageBoxIcon]::Information
@@ -760,6 +961,7 @@ fi
 
             $script:ProcessButton.Enabled = $true
             $script:SelectButton.Enabled = $true
+            $script:DownloadButton.Enabled = $true
         }
         elseif ($job.State -eq "Failed") {
             $timer.Stop()
@@ -781,7 +983,7 @@ function Show-MainForm {
     # Main Form
     $script:MainForm = New-Object System.Windows.Forms.Form
     $script:MainForm.Text = "HomePiNAS Image Builder v$script:Version"
-    $script:MainForm.Size = New-Object System.Drawing.Size(700, 600)
+    $script:MainForm.Size = New-Object System.Drawing.Size(700, 720)
     $script:MainForm.StartPosition = "CenterScreen"
     $script:MainForm.FormBorderStyle = "FixedSingle"
     $script:MainForm.MaximizeBox = $false
@@ -818,7 +1020,7 @@ function Show-MainForm {
 
     # Content Panel
     $contentPanel = New-Object System.Windows.Forms.Panel
-    $contentPanel.Size = New-Object System.Drawing.Size(660, 440)
+    $contentPanel.Size = New-Object System.Drawing.Size(660, 555)
     $contentPanel.Location = New-Object System.Drawing.Point(20, 120)
     $contentPanel.BackColor = $script:Colors.Surface
     $script:MainForm.Controls.Add($contentPanel)
@@ -945,7 +1147,7 @@ function Show-MainForm {
 
     # Log textbox
     $script:LogTextBox = New-Object System.Windows.Forms.RichTextBox
-    $script:LogTextBox.Size = New-Object System.Drawing.Size(620, 120)
+    $script:LogTextBox.Size = New-Object System.Drawing.Size(620, 90)
     $script:LogTextBox.Location = New-Object System.Drawing.Point(20, 260)
     $script:LogTextBox.Font = New-Object System.Drawing.Font("Consolas", 9)
     $script:LogTextBox.ReadOnly = $true
@@ -957,9 +1159,9 @@ function Show-MainForm {
     # Process button
     $script:ProcessButton = New-Object System.Windows.Forms.Button
     $script:ProcessButton.Text = "CREAR IMAGEN HOMEPINAS"
-    $script:ProcessButton.Size = New-Object System.Drawing.Size(620, 45)
-    $script:ProcessButton.Location = New-Object System.Drawing.Point(20, 390)
-    $script:ProcessButton.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $script:ProcessButton.Size = New-Object System.Drawing.Size(620, 40)
+    $script:ProcessButton.Location = New-Object System.Drawing.Point(20, 360)
+    $script:ProcessButton.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
     $script:ProcessButton.BackColor = $script:Colors.Success
     $script:ProcessButton.ForeColor = [System.Drawing.Color]::White
     $script:ProcessButton.FlatStyle = "Flat"
@@ -982,12 +1184,111 @@ function Show-MainForm {
         }
     })
 
+    # ============================================================================
+    # USB/SD BURN SECTION
+    # ============================================================================
+
+    # Separator line
+    $separatorPanel = New-Object System.Windows.Forms.Panel
+    $separatorPanel.Size = New-Object System.Drawing.Size(620, 1)
+    $separatorPanel.Location = New-Object System.Drawing.Point(20, 415)
+    $separatorPanel.BackColor = [System.Drawing.Color]::FromArgb(200, 200, 200)
+    $contentPanel.Controls.Add($separatorPanel)
+
+    # Step 4: Burn to USB
+    $step4Label = New-Object System.Windows.Forms.Label
+    $step4Label.Text = "4. Grabar en tarjeta SD / USB"
+    $step4Label.Font = New-Object System.Drawing.Font("Segoe UI Semibold", 11)
+    $step4Label.ForeColor = $script:Colors.TextPrimary
+    $step4Label.Location = New-Object System.Drawing.Point(20, 425)
+    $step4Label.AutoSize = $true
+    $contentPanel.Controls.Add($step4Label)
+
+    # Drive combo box
+    $script:DriveComboBox = New-Object System.Windows.Forms.ComboBox
+    $script:DriveComboBox.Size = New-Object System.Drawing.Size(420, 30)
+    $script:DriveComboBox.Location = New-Object System.Drawing.Point(20, 455)
+    $script:DriveComboBox.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $script:DriveComboBox.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    $contentPanel.Controls.Add($script:DriveComboBox)
+
+    # Refresh button
+    $script:RefreshButton = New-Object System.Windows.Forms.Button
+    $script:RefreshButton.Text = "Actualizar"
+    $script:RefreshButton.Size = New-Object System.Drawing.Size(90, 30)
+    $script:RefreshButton.Location = New-Object System.Drawing.Point(450, 455)
+    $script:RefreshButton.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:RefreshButton.BackColor = $script:Colors.Primary
+    $script:RefreshButton.ForeColor = [System.Drawing.Color]::White
+    $script:RefreshButton.FlatStyle = "Flat"
+    $script:RefreshButton.FlatAppearance.BorderSize = 0
+    $script:RefreshButton.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $contentPanel.Controls.Add($script:RefreshButton)
+
+    $script:RefreshButton.Add_Click({
+        Update-DriveList
+        Write-Log "Lista de unidades actualizada" "Info"
+    })
+
+    # Burn button
+    $script:BurnButton = New-Object System.Windows.Forms.Button
+    $script:BurnButton.Text = "GRABAR"
+    $script:BurnButton.Size = New-Object System.Drawing.Size(90, 30)
+    $script:BurnButton.Location = New-Object System.Drawing.Point(550, 455)
+    $script:BurnButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $script:BurnButton.BackColor = $script:Colors.Warning
+    $script:BurnButton.ForeColor = [System.Drawing.Color]::White
+    $script:BurnButton.FlatStyle = "Flat"
+    $script:BurnButton.FlatAppearance.BorderSize = 0
+    $script:BurnButton.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $script:BurnButton.Enabled = $false
+    $contentPanel.Controls.Add($script:BurnButton)
+
+    $script:BurnButton.Add_Click({
+        if ($script:RemovableDrives.Count -gt 0 -and $script:ProcessedImagePath) {
+            $selectedIndex = $script:DriveComboBox.SelectedIndex
+            if ($selectedIndex -ge 0 -and $selectedIndex -lt $script:RemovableDrives.Count) {
+                $selectedDrive = $script:RemovableDrives[$selectedIndex]
+                Write-ImageToDrive -ImagePath $script:ProcessedImagePath -DiskNumber $selectedDrive.Number
+            }
+        } else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Primero debes crear la imagen HomePiNAS (paso anterior).",
+                "HomePiNAS Image Builder",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
+        }
+    })
+
+    # USB info label
+    $usbInfoLabel = New-Object System.Windows.Forms.Label
+    $usbInfoLabel.Text = "Inserta una tarjeta SD o USB y pulsa 'Actualizar' para detectarla"
+    $usbInfoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $usbInfoLabel.ForeColor = $script:Colors.TextSecondary
+    $usbInfoLabel.Location = New-Object System.Drawing.Point(20, 490)
+    $usbInfoLabel.AutoSize = $true
+    $contentPanel.Controls.Add($usbInfoLabel)
+
+    # Warning label
+    $warningLabel = New-Object System.Windows.Forms.Label
+    $warningLabel.Text = "⚠ ATENCION: Grabar borrara TODOS los datos de la unidad seleccionada"
+    $warningLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $warningLabel.ForeColor = $script:Colors.Error
+    $warningLabel.Location = New-Object System.Drawing.Point(20, 510)
+    $warningLabel.AutoSize = $true
+    $contentPanel.Controls.Add($warningLabel)
+
+    # Initialize variables
+    $script:ProcessedImagePath = $null
+    $script:RemovableDrives = @()
+
     # Footer
     $footerLabel = New-Object System.Windows.Forms.Label
     $footerLabel.Text = "homelabs.club - github.com/juanlusoft/homepinas-v2"
     $footerLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
     $footerLabel.ForeColor = $script:Colors.TextSecondary
-    $footerLabel.Location = New-Object System.Drawing.Point(20, 570)
+    $footerLabel.Location = New-Object System.Drawing.Point(20, 685)
     $footerLabel.AutoSize = $true
     $script:MainForm.Controls.Add($footerLabel)
 
@@ -998,10 +1299,13 @@ function Show-MainForm {
             Write-Log "ADVERTENCIA: Esta aplicacion requiere permisos de Administrador" "Warning"
             Write-Log "Reinicia como Administrador para continuar" "Warning"
             $script:SelectButton.Enabled = $false
+            $script:DownloadButton.Enabled = $false
             $script:ProcessButton.Enabled = $false
+            $script:RefreshButton.Enabled = $false
         } else {
             Write-Log "Aplicacion iniciada correctamente" "Success"
-            Write-Log "Selecciona una imagen de Raspberry Pi OS para comenzar" "Info"
+            Write-Log "Descarga o selecciona una imagen de Raspberry Pi OS" "Info"
+            Update-DriveList
         }
     })
 
