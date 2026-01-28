@@ -43,6 +43,7 @@ NREOF
 
 TARGET_DIR="/opt/homepinas"
 REPO_URL="https://github.com/juanlusoft/homepinas-v2.git"
+BRANCH="ui-redesign-homelabs"
 FANCTL_SCRIPT="/usr/local/bin/homepinas-fanctl.sh"
 FANCTL_CONF="/usr/local/bin/homepinas-fanctl.conf"
 CONFIG_FILE="/boot/firmware/config.txt"
@@ -195,8 +196,8 @@ if [ -d "$TARGET_DIR" ]; then
     rm -rf "$TARGET_DIR"
 fi
 
-echo -e "${BLUE}[3/7] Cloning repository...${NC}"
-git clone $REPO_URL $TARGET_DIR
+echo -e "${BLUE}[3/7] Cloning repository (branch: $BRANCH)...${NC}"
+git clone -b $BRANCH $REPO_URL $TARGET_DIR
 
 cd $TARGET_DIR
 
