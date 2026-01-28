@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 
 <head>
     <meta charset="UTF-8">
@@ -13,6 +13,11 @@
 </head>
 
 <body>
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" id="theme-toggle" title="Cambiar tema">
+        🎨
+    </button>
+
     <div id="app">
         <!-- Setup View (Visible if no account exists) -->
         <div id="setup-view" class="view">
@@ -269,6 +274,31 @@
         </div>
     </div>
 
+    <!-- Theme Toggle Script -->
+    <script>
+        (function() {
+            const html = document.documentElement;
+            const toggle = document.getElementById('theme-toggle');
+
+            // Load saved theme or default to light
+            const savedTheme = localStorage.getItem('homepinas-theme') || 'light';
+            html.setAttribute('data-theme', savedTheme);
+            updateIcon(savedTheme);
+
+            toggle.addEventListener('click', () => {
+                const current = html.getAttribute('data-theme');
+                const next = current === 'light' ? 'dark' : 'light';
+                html.setAttribute('data-theme', next);
+                localStorage.setItem('homepinas-theme', next);
+                updateIcon(next);
+            });
+
+            function updateIcon(theme) {
+                toggle.textContent = theme === 'light' ? '🌙' : '☀️';
+                toggle.title = theme === 'light' ? 'Modo oscuro' : 'Modo claro';
+            }
+        })();
+    </script>
     <script type="module" src="frontend/main.js"></script>
 </body>
 

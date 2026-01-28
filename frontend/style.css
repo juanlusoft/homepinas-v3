@@ -1,32 +1,88 @@
 :root {
-    /* HomeLabs Brand Colors */
-    --primary: #84cc16;              /* Verde Lima - botones y selección */
-    --primary-glow: rgba(132, 204, 22, 0.3);
-    --accent-cyan: #06b6d4;          /* Cian - títulos de tarjetas */
-    --accent-cyan-dim: #0891b2;
+    /* HomeLabs Brand Colors - Always the same */
+    --primary: #84cc16;              /* Verde Lima */
+    --primary-glow: rgba(132, 204, 22, 0.4);
+    --accent-cyan: #06b6d4;          /* Cian */
+    --accent-cyan-glow: rgba(6, 182, 212, 0.4);
+    --font-main: 'Outfit', sans-serif;
+}
 
-    /* Backgrounds */
-    --bg-light: #f8f9fa;             /* Fondo principal - gris muy claro */
-    --bg-white: #ffffff;
-    --sidebar-bg: #1f2937;           /* Sidebar - gris oscuro */
+/* ========== LIGHT MODE (Default) ========== */
+[data-theme="light"], :root {
+    --bg-main: #f8f9fa;              /* Fondo principal */
+    --bg-surface: #ffffff;           /* Superficies/tarjetas */
+    --sidebar-bg: #1f2937;           /* Sidebar oscuro */
     --sidebar-hover: #374151;
+    --sidebar-text: rgba(255, 255, 255, 0.6);
+    --sidebar-text-active: #84cc16;
 
-    /* Text */
-    --text-dark: #1f2937;            /* Texto principal */
-    --text-dim: #6b7280;             /* Texto secundario */
-    --text-white: #ffffff;
+    --text-primary: #1f2937;         /* Texto principal */
+    --text-secondary: #6b7280;       /* Texto secundario */
+    --text-on-sidebar: #ffffff;
 
-    /* Cards */
     --card-bg: #ffffff;
-    --card-border: #374151;          /* Bordes gris oscuro */
+    --card-border: #e5e7eb;
     --card-shadow: rgba(0, 0, 0, 0.08);
+    --hover-bg: rgba(0, 0, 0, 0.04);
+    --active-bg: rgba(0, 0, 0, 0.06);
 
-    /* Legacy compatibility */
+    --input-bg: transparent;
+    --input-border: #374151;
+    --input-text: #1f2937;
+
+    /* Legacy */
     --bg-dark: #1f2937;
     --glass-bg: rgba(255, 255, 255, 0.95);
     --glass-border: #e5e7eb;
-    --glass-blur: blur(12px);
-    --font-main: 'Outfit', sans-serif;
+    --text-dark: var(--text-primary);
+    --text-dim: var(--text-secondary);
+    --text-white: #ffffff;
+}
+
+/* ========== DARK MODE ========== */
+[data-theme="dark"] {
+    --bg-main: #0a0a0a;              /* Negro mate - fondo principal */
+    --bg-surface: #1a1a1a;           /* Gris grafito - superficies */
+    --sidebar-bg: #141414;           /* Sidebar más oscuro */
+    --sidebar-hover: #252525;
+    --sidebar-text: rgba(255, 255, 255, 0.5);
+    --sidebar-text-active: #84cc16;
+
+    --text-primary: #f5f5f5;         /* Texto blanco */
+    --text-secondary: #a3a3a3;       /* Gris claro */
+    --text-on-sidebar: #ffffff;
+
+    --card-bg: #1a1a1a;              /* Gris grafito */
+    --card-border: #2a2a2a;
+    --card-shadow: rgba(0, 0, 0, 0.3);
+    --hover-bg: rgba(255, 255, 255, 0.05);
+    --active-bg: rgba(255, 255, 255, 0.08);
+
+    --input-bg: #252525;
+    --input-border: #404040;
+    --input-text: #f5f5f5;
+
+    /* Legacy */
+    --bg-dark: #0a0a0a;
+    --glass-bg: rgba(26, 26, 26, 0.95);
+    --glass-border: #2a2a2a;
+    --text-dark: var(--text-primary);
+    --text-dim: var(--text-secondary);
+    --text-white: #ffffff;
+}
+
+/* Dark mode glow effects */
+[data-theme="dark"] .btn-primary {
+    box-shadow: 0 0 20px var(--primary-glow), 0 4px 15px var(--primary-glow);
+}
+
+[data-theme="dark"] .glass-card h3,
+[data-theme="dark"] .glass-card h4 {
+    text-shadow: 0 0 10px var(--accent-cyan-glow);
+}
+
+[data-theme="dark"] .nav-links li.active {
+    box-shadow: inset 3px 0 10px var(--primary-glow);
 }
 
 * {
@@ -37,10 +93,41 @@
 
 body {
     font-family: var(--font-main);
-    background-color: var(--bg-light);
-    color: var(--text-dark);
+    background-color: var(--bg-main);
+    color: var(--text-primary);
     height: 100vh;
     overflow: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px var(--card-shadow);
+}
+
+.theme-toggle:hover {
+    transform: scale(1.05);
+    border-color: var(--primary);
+}
+
+[data-theme="dark"] .theme-toggle {
+    box-shadow: 0 0 15px var(--primary-glow);
 }
 
 #app {
@@ -79,11 +166,18 @@ body {
     border-radius: 12px;
     padding: 24px;
     box-shadow: 0 2px 8px var(--card-shadow);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .glass-card h3,
 .glass-card h4 {
     color: var(--accent-cyan);
+    transition: text-shadow 0.3s ease;
+}
+
+.glass-card p,
+.glass-card span {
+    color: var(--text-primary);
 }
 
 /* Login View */
@@ -119,14 +213,14 @@ body {
 
 .input-group input {
     width: 100%;
-    background: transparent;
+    background: var(--input-bg);
     border: none;
-    border-bottom: 2px solid var(--card-border);
+    border-bottom: 2px solid var(--input-border);
     padding: 10px 0;
-    color: var(--text-dark);
+    color: var(--input-text);
     font-size: 1rem;
     outline: none;
-    transition: border-color 0.3s;
+    transition: border-color 0.3s, background-color 0.3s;
 }
 
 .input-group input:focus {
@@ -197,7 +291,7 @@ body {
 .nav-links li {
     padding: 15px 30px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--sidebar-text);
     transition: all 0.3s;
     border-left: 3px solid transparent;
 }
