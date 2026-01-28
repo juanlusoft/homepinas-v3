@@ -1,11 +1,30 @@
 :root {
-    --primary: #6366f1;
-    --primary-glow: rgba(99, 102, 241, 0.4);
-    --bg-dark: #0f172a;
-    --text-white: #f8fafc;
-    --text-dim: #94a3b8;
-    --glass-bg: rgba(255, 255, 255, 0.05);
-    --glass-border: rgba(255, 255, 255, 0.1);
+    /* HomeLabs Brand Colors */
+    --primary: #84cc16;              /* Verde Lima - botones y selección */
+    --primary-glow: rgba(132, 204, 22, 0.3);
+    --accent-cyan: #06b6d4;          /* Cian - títulos de tarjetas */
+    --accent-cyan-dim: #0891b2;
+
+    /* Backgrounds */
+    --bg-light: #f8f9fa;             /* Fondo principal - gris muy claro */
+    --bg-white: #ffffff;
+    --sidebar-bg: #1f2937;           /* Sidebar - gris oscuro */
+    --sidebar-hover: #374151;
+
+    /* Text */
+    --text-dark: #1f2937;            /* Texto principal */
+    --text-dim: #6b7280;             /* Texto secundario */
+    --text-white: #ffffff;
+
+    /* Cards */
+    --card-bg: #ffffff;
+    --card-border: #374151;          /* Bordes gris oscuro */
+    --card-shadow: rgba(0, 0, 0, 0.08);
+
+    /* Legacy compatibility */
+    --bg-dark: #1f2937;
+    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-border: #e5e7eb;
     --glass-blur: blur(12px);
     --font-main: 'Outfit', sans-serif;
 }
@@ -18,13 +37,10 @@
 
 body {
     font-family: var(--font-main);
-    background-color: var(--bg-dark);
-    color: var(--text-white);
+    background-color: var(--bg-light);
+    color: var(--text-dark);
     height: 100vh;
     overflow: hidden;
-    background-image: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.7)), url('../.gemini/antigravity/brain/2269fd10-c280-4167-ac1d-65fa0b1a8cf2/nas_hero_background_1769345973445.png');
-    background-size: cover;
-    background-position: center;
 }
 
 #app {
@@ -56,14 +72,18 @@ body {
     margin: auto;
 }
 
-/* Glassmorphism Card */
+/* Card Style - HomeLabs Design */
 .glass-card {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--glass-border);
-    border-radius: 20px;
-    padding: 40px;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px var(--card-shadow);
+}
+
+.glass-card h3,
+.glass-card h4 {
+    color: var(--accent-cyan);
 }
 
 /* Login View */
@@ -83,6 +103,7 @@ body {
     font-weight: 600;
     margin-bottom: 8px;
     letter-spacing: -1px;
+    color: var(--accent-cyan);
 }
 
 .brand p {
@@ -100,9 +121,9 @@ body {
     width: 100%;
     background: transparent;
     border: none;
-    border-bottom: 2px solid var(--glass-border);
+    border-bottom: 2px solid var(--card-border);
     padding: 10px 0;
-    color: white;
+    color: var(--text-dark);
     font-size: 1rem;
     outline: none;
     transition: border-color 0.3s;
@@ -146,12 +167,11 @@ body {
     box-shadow: 0 6px 20px var(--primary-glow);
 }
 
-/* Dashboard Sidebar */
+/* Dashboard Sidebar - HomeLabs Dark */
 .sidebar {
     width: 260px;
-    background: rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(20px);
-    border-right: 1px solid var(--glass-border);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--card-border);
     display: flex;
     flex-direction: column;
     padding: 30px 0;
@@ -177,18 +197,19 @@ body {
 .nav-links li {
     padding: 15px 30px;
     cursor: pointer;
-    color: var(--text-dim);
+    color: rgba(255, 255, 255, 0.6);
     transition: all 0.3s;
     border-left: 3px solid transparent;
 }
 
-.nav-links li.active,
 .nav-links li:hover {
-    color: white;
-    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-white);
+    background: var(--sidebar-hover);
 }
 
 .nav-links li.active {
+    color: var(--primary);
+    background: var(--sidebar-hover);
     border-left-color: var(--primary);
 }
 
