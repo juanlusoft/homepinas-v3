@@ -7,7 +7,7 @@
 set -e
 
 # Version - CHANGE THIS FOR EACH RELEASE
-VERSION="2.0.1"
+VERSION="2.0.2"
 
 # Colors
 RED='\033[0;31m'
@@ -121,6 +121,14 @@ echo -e "${BLUE}Cleaning old repository configurations...${NC}"
 rm -f /etc/apt/sources.list.d/docker.list 2>/dev/null || true
 rm -f /etc/apt/keyrings/docker.asc 2>/dev/null || true
 
+# Temporarily disable any third-party repos that might cause issues
+for f in /etc/apt/sources.list.d/*.list; do
+    if [ -f "$f" ] && [ "$f" != "/etc/apt/sources.list.d/raspi.list" ]; then
+        echo -e "${YELLOW}Temporarily disabling: $f${NC}"
+        mv "$f" "${f}.disabled" 2>/dev/null || true
+    fi
+done
+
 # Function to ensure repositories are properly configured
 configure_repositories() {
     local sources_file="/etc/apt/sources.list"
@@ -129,9 +137,19 @@ configure_repositories() {
 
     echo -e "${BLUE}Checking repository configuration...${NC}"
 
-    # Check if essential packages are available (test with git)
-    if ! apt-cache show git &>/dev/null; then
+    # First, clean apt cache to ensure fresh data
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+    # Quick update to test repos
+    apt-get update -qq 2>/dev/null || true
+
+    # Check if essential packages are actually installable (not just in cache)
+    if ! apt-get install --dry-run git &>/dev/null; then
         echo -e "${YELLOW}Essential packages not available - fixing repositories...${NC}"
+        echo -e "${YELLOW}Current sources.list before fix:${NC}"
+        cat "$sources_file" 2>/dev/null || echo "(empty or missing)"
+        echo -e ""
         need_update=true
 
         # Backup current sources.list
@@ -225,14 +243,24 @@ echo -e "${BLUE}Updating package lists...${NC}"
 apt-get update
 
 # Verify packages are now available
-if ! apt-cache show git &>/dev/null; then
-    echo -e "${RED}ERROR: Package repositories still not working properly.${NC}"
-    echo -e "${YELLOW}Please check your internet connection and try again.${NC}"
+echo -e "${BLUE}Verifying package availability...${NC}"
+if ! apt-get install --dry-run git &>/dev/null; then
+    echo -e "${RED}=========================================${NC}"
+    echo -e "${RED}ERROR: Package repositories not working!${NC}"
+    echo -e "${RED}=========================================${NC}"
+    echo -e "${YELLOW}Git package is not installable.${NC}"
     echo -e "${YELLOW}Current sources.list:${NC}"
+    echo -e "${CYAN}---${NC}"
     cat /etc/apt/sources.list
+    echo -e "${CYAN}---${NC}"
+    echo -e ""
+    echo -e "${YELLOW}Please verify your internet connection and try:${NC}"
+    echo -e "  sudo apt-get update"
+    echo -e "  sudo apt-get install git"
+    echo -e ""
     exit 1
 fi
-echo -e "${GREEN}Repository configuration verified${NC}"
+echo -e "${GREEN}✓ Repository configuration verified${NC}"
 
 #######################################
 # PHASE 3: INSTALL PACKAGES
