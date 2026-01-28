@@ -36,7 +36,8 @@ jobs:
 
       - name: Update version in install.sh
         run: |
-          sed -i 's/VERSION="[^"]*"/VERSION="${{ steps.bump.outputs.new }}"/' install.sh
+          # Only update the main VERSION= line (starts with VERSION, not OS_VERSION etc)
+          sed -i 's/^VERSION="[^"]*"/VERSION="${{ steps.bump.outputs.new }}"/' install.sh
 
       - name: Update version in package.json
         run: |

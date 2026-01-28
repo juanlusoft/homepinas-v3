@@ -62,7 +62,7 @@ echo -e "${BLUE}[1/7] Detecting operating system...${NC}"
 
 # Initialize detection variables
 OS_ID=""
-OS_VERSION="2.0.4"
+OS_VER=""
 OS_CODENAME=""
 OS_PRETTY=""
 ARCH=""
@@ -87,7 +87,7 @@ fi
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS_ID="$ID"
-    OS_VERSION="2.0.4"
+    OS_VER="$VERSION_ID"
     OS_CODENAME="$VERSION_CODENAME"
     OS_PRETTY="$PRETTY_NAME"
 fi
