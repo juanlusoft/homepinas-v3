@@ -1,6 +1,6 @@
 {
   "name": "homepinas",
-  "version": "2.0.14",
+  "version": "3.0.1",
   "description": "HomePiNAS - Secure NAS Dashboard for Raspberry Pi",
   "main": "backend/index.js",
   "scripts": {
