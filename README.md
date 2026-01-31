@@ -1,88 +1,94 @@
-# HomePiNAS v1.5.8
+# HomePiNAS v3.0.0
 
-Premium NAS Dashboard for Raspberry Pi CM5 - Homelabs.club Edition
+Premium NAS Dashboard with Dual Storage Backend Support - Homelabs.club Edition
 
-## Features
+## New in v3.0.0: Choose Your Storage Backend
 
-- **SnapRAID + MergerFS** - Disk pooling with parity protection
-- **Samba Sharing** - Network file sharing with automatic user creation
-- **Docker Management** - Container control from dashboard
-- **Fan Control** - PWM control for EMC2305 (Silent/Balanced/Performance)
-- **System Monitoring** - CPU, Memory, Disk, Network stats
-- **DDNS Support** - Cloudflare, No-IP, DuckDNS
+During installation, you can now choose between two storage backends:
 
-## Security Features (v1.5.7)
-
-- Bcrypt password hashing (12 rounds)
-- SQLite-backed persistent sessions with expiration
-- Rate limiting protection
-- Helmet security headers
-- Input sanitization for shell commands
-- Restricted sudoers configuration
-- HTTPS support with self-signed certificates
+| Feature | SnapRAID + MergerFS | NonRAID |
+|---------|---------------------|---------|
+| Type | Userspace | Kernel driver |
+| Parity | Scheduled (daily 3 AM) | Real-time |
+| Pool | Unified `/mnt/storage` | Individual `/mnt/disk[N]` |
+| Cache | Supported | Not supported |
+| Kernel | All kernels | Not 6.9 or 6.10 |
 
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/juanlusoft/homepinas-v2/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/juanlusoft/homepinas-v3/main/install.sh | sudo bash
 ```
+
+The installer will prompt you to choose your storage backend.
+
+## Features
+
+- **Dual Storage Backend** - Choose SnapRAID+MergerFS or NonRAID
+- **Samba Sharing** - Network file sharing with flexible share modes
+- **Docker Management** - Container control from dashboard
+- **Fan Control** - PWM control for EMC2305 (Silent/Balanced/Performance)
+- **System Monitoring** - CPU, Memory, Disk, Network stats
+- **DDNS Support** - Cloudflare, No-IP, DuckDNS
+- **HTTPS** - Self-signed certificates
+- **OTA Updates** - Update from dashboard
+
+## Storage Backend Details
+
+### Option 1: SnapRAID + MergerFS (Recommended for beginners)
+
+- Userspace solution - no kernel driver needed
+- Scheduled parity sync (daily at 3 AM)
+- All disks merged into single pool at `/mnt/storage`
+- Supports cache disk (NVMe/SSD) for faster writes
+- Works on all kernel versions
+
+### Option 2: NonRAID (Advanced users)
+
+- Kernel driver similar to unRAID
+- Real-time parity protection (no scheduled syncs)
+- Each disk mounted individually at `/mnt/disk[N]`
+- Flexible share modes: Individual, Merged, or Categories
+- **Not compatible with kernel 6.9 or 6.10**
+
+## NonRAID Share Modes
+
+When using NonRAID, you can choose how shares are configured:
+
+1. **Individual** - Each disk as a separate share (`\\server\Disk1`, `\\server\Disk2`)
+2. **Merged** - Unified pool using MergerFS (`\\server\Storage`)
+3. **Categories** - Named by category (`\\server\Media`, `\\server\Documents`)
 
 ## Requirements
 
-- Raspberry Pi CM5 (or compatible ARM64 device)
-- Raspberry Pi OS Bookworm (64-bit)
-- At least 2 disks for SnapRAID (1 data + 1 parity)
+- Raspberry Pi CM5 / Debian / Ubuntu (ARM64 or AMD64)
+- At least 2 disks (1 data + 1 parity)
+- For NonRAID: Kernel version != 6.9, != 6.10
 
 ## Access
 
 - Dashboard: `https://<IP>:3001`
-- SMB Share: `\\<IP>\Storage`
+- SMB Shares: Depends on backend and share mode
 
 ## Version History
 
-- **1.5.8** - Enhanced Docker Manager
-  - Import and run docker-compose files
-  - Container update detection (pull latest and compare)
-  - One-click container updates from dashboard
-  - CPU/RAM stats per container
-  - Compose stack management (run, stop, delete)
+- **3.0.0** - Dual Storage Backend Support
+  - Interactive backend selection during install
+  - NonRAID kernel driver support
+  - Flexible share modes for NonRAID
+  - Kernel compatibility checking
 
-- **1.5.7** - OTA updates
-  - Check for updates from dashboard
-  - One-click update installation
-  - Automatic service restart
+- **2.0.14** - Previous stable release (SnapRAID + MergerFS only)
 
-- **1.5.6** - Modular architecture
-  - Refactored monolithic code into modules
-  - Separate files for routes, middleware, and utilities
-  - Easier to maintain and extend
-  - ~1600 lines split into 10+ organized modules
+## Security Features
 
-- **1.5.5** - Fan hysteresis
-  - Added temperature hysteresis to prevent fan speed oscillation
-  - State file tracks previous PWM values
-  - Configurable HYST_TEMP parameter per preset
-
-- **1.5.4** - Persistent sessions
-  - SQLite-backed session storage
-  - Sessions survive server restarts
-
-- **1.5.3** - HTTPS support
-  - Self-signed certificate generation
-  - Dual HTTP/HTTPS servers
-
-- **1.5.2** - Restricted sudoers
-  - Limited sudo commands to specific paths/arguments
-  - Improved security for system commands
-
-- **1.5.1** - Command injection fix
-  - Input sanitization for shell commands
-  - Secure Samba password handling via stdin
-
-- **1.5.0** - Security hardened edition (base)
-  - Bcrypt password hashing
-  - Rate limiting
-  - Helmet security headers
+- Bcrypt password hashing
+- SQLite-backed persistent sessions
+- Rate limiting protection
+- Helmet security headers
+- Input sanitization
+- Restricted sudoers configuration
+- HTTPS with self-signed certificates
 
 ## License
 
