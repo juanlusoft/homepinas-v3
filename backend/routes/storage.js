@@ -1,13 +1,14 @@
 /**
  * HomePiNAS - Storage Routes
- * v1.5.6 - Modular Architecture
+ * v3.0.0 - Dual Backend Support
  *
- * SnapRAID + MergerFS storage pool management
+ * Supports both SnapRAID + MergerFS and NonRAID storage backends
  */
 
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
+const path = require('path');
 const { execSync, spawn } = require('child_process');
 
 const { requireAuth } = require('../middleware/auth');
@@ -15,9 +16,28 @@ const { logSecurityEvent } = require('../utils/security');
 const { getData, saveData } = require('../utils/data');
 const { validateSession } = require('../utils/session');
 
+// Constants - SnapRAID
 const STORAGE_MOUNT_BASE = '/mnt/disks';
 const POOL_MOUNT = '/mnt/storage';
 const SNAPRAID_CONF = '/etc/snapraid.conf';
+
+// Constants - NonRAID
+const NONRAID_DAT = '/nonraid.dat';
+const NONRAID_MOUNT_PREFIX = '/mnt/disk';
+
+// Detect storage backend from config file
+function getStorageBackend() {
+    try {
+        const configPath = path.join(__dirname, '..', 'storage-backend.conf');
+        if (fs.existsSync(configPath)) {
+            const content = fs.readFileSync(configPath, 'utf8');
+            const match = content.match(/STORAGE_BACKEND=(\w+)/);
+            if (match) return match[1];
+        }
+    } catch (e) {}
+    // Also check environment variable
+    return process.env.STORAGE_BACKEND || 'snapraid';
+}
 
 // SnapRAID sync progress tracking
 let snapraidSyncStatus = {
@@ -27,6 +47,40 @@ let snapraidSyncStatus = {
     startTime: null,
     error: null
 };
+
+// NonRAID status tracking
+let nonraidStatus = {
+    checking: false,
+    progress: 0,
+    step: '',
+    error: null
+};
+
+// NonRAID configure status
+let nonraidConfigureStatus = {
+    active: false,
+    step: '',
+    progress: 0,
+    error: null
+};
+
+// Helper: Execute command with promise
+function execPromise(cmd) {
+    return new Promise((resolve, reject) => {
+        require('child_process').exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+            if (error) {
+                reject({ error, stderr, stdout });
+            } else {
+                resolve({ stdout, stderr });
+            }
+        });
+    });
+}
+
+// GET /storage/backend - Get current storage backend
+router.get('/backend', (req, res) => {
+    res.json({ backend: getStorageBackend() });
+});
 
 // Get storage pool status
 router.get('/pool/status', async (req, res) => {
@@ -437,6 +491,358 @@ router.post('/config', (req, res) => {
         console.error('Storage config error:', e);
         res.status(500).json({ error: 'Failed to save storage configuration' });
     }
+});
+
+// ============================================
+// NonRAID Endpoints (only active when backend = nonraid)
+// ============================================
+
+// GET /storage/array/status - Get NonRAID array status
+router.get('/array/status', async (req, res) => {
+    if (getStorageBackend() !== 'nonraid') {
+        return res.status(400).json({ error: 'NonRAID backend not active' });
+    }
+
+    try {
+        // Check if NonRAID is installed
+        try {
+            execSync('which nmdctl', { encoding: 'utf8' });
+        } catch {
+            return res.json({
+                success: true,
+                installed: false,
+                status: 'NOT_INSTALLED'
+            });
+        }
+
+        // Check if array exists
+        if (!fs.existsSync(NONRAID_DAT)) {
+            return res.json({
+                success: true,
+                installed: true,
+                configured: false,
+                status: 'NOT_CONFIGURED'
+            });
+        }
+
+        // Get array status
+        const { stdout } = await execPromise('sudo nmdctl status -o json');
+        const status = JSON.parse(stdout);
+
+        // Get disk usage for each mounted disk
+        const disks = [];
+        for (let i = 0; i < status.dataDisks; i++) {
+            const mountPoint = `${NONRAID_MOUNT_PREFIX}${i + 1}`;
+            try {
+                const dfOut = execSync(`df -B1 "${mountPoint}" | tail -1`, { encoding: 'utf8' });
+                const parts = dfOut.trim().split(/\s+/);
+                disks.push({
+                    slot: i + 1,
+                    mountPoint,
+                    device: parts[0],
+                    total: parseInt(parts[1]),
+                    used: parseInt(parts[2]),
+                    available: parseInt(parts[3]),
+                    usagePercent: parseInt(parts[4])
+                });
+            } catch {
+                disks.push({
+                    slot: i + 1,
+                    mountPoint,
+                    status: 'unmounted'
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            installed: true,
+            configured: true,
+            status: status.state,
+            parityValid: status.parityValid,
+            parityDisk: status.parityDisk,
+            dataDisks: status.dataDisks,
+            disks,
+            lastCheck: status.lastCheck,
+            checking: nonraidStatus.checking,
+            checkProgress: nonraidStatus.progress
+        });
+
+    } catch (error) {
+        console.error('Error getting array status:', error);
+        res.status(500).json({ success: false, error: 'Failed to get array status' });
+    }
+});
+
+// POST /storage/array/configure - Configure NonRAID array
+router.post('/array/configure', requireAuth, async (req, res) => {
+    if (getStorageBackend() !== 'nonraid') {
+        return res.status(400).json({ error: 'NonRAID backend not active' });
+    }
+
+    const { dataDisks, parityDisk, shareMode } = req.body;
+
+    if (!dataDisks || !Array.isArray(dataDisks) || dataDisks.length === 0) {
+        return res.status(400).json({ success: false, error: 'At least one data disk required' });
+    }
+
+    if (!parityDisk) {
+        return res.status(400).json({ success: false, error: 'Parity disk required' });
+    }
+
+    const parity = Array.isArray(parityDisk) ? parityDisk[0] : parityDisk;
+
+    nonraidConfigureStatus = {
+        active: true,
+        step: 'partition',
+        progress: 0,
+        error: null
+    };
+
+    res.json({ success: true, message: 'Configuration started' });
+
+    // Run configuration async
+    configureNonRAIDArray(dataDisks, parity, shareMode || 'individual').catch(err => {
+        console.error('NonRAID configuration failed:', err);
+        nonraidConfigureStatus.error = err.message || 'Configuration failed';
+        nonraidConfigureStatus.active = false;
+    });
+});
+
+async function configureNonRAIDArray(dataDisks, parityDisk, shareMode) {
+    try {
+        // Step 1: Partition disks
+        nonraidConfigureStatus.step = 'partition';
+        nonraidConfigureStatus.progress = 0;
+
+        const allDisks = [...dataDisks, parityDisk];
+        for (let i = 0; i < allDisks.length; i++) {
+            const disk = allDisks[i];
+            execSync(`sudo sgdisk -o -a 8 -n 1:32K:0 ${disk}`, { encoding: 'utf8' });
+            nonraidConfigureStatus.progress = Math.round(((i + 1) / allDisks.length) * 100);
+        }
+
+        // Step 2: Create NonRAID array
+        nonraidConfigureStatus.step = 'array';
+        nonraidConfigureStatus.progress = 0;
+
+        const dataPartitions = dataDisks.map(d => `${d}1`).join(' ');
+        const parityPartition = `${parityDisk}1`;
+
+        execSync(`sudo nmdctl create -p ${parityPartition} ${dataPartitions}`, { encoding: 'utf8' });
+        nonraidConfigureStatus.progress = 100;
+
+        // Step 3: Start array
+        nonraidConfigureStatus.step = 'start';
+        nonraidConfigureStatus.progress = 0;
+        execSync('sudo nmdctl start', { encoding: 'utf8' });
+        nonraidConfigureStatus.progress = 100;
+
+        // Step 4: Create filesystems
+        nonraidConfigureStatus.step = 'filesystem';
+        nonraidConfigureStatus.progress = 0;
+
+        for (let i = 0; i < dataDisks.length; i++) {
+            execSync(`sudo mkfs.xfs -f /dev/nmd${i + 1}p1`, { encoding: 'utf8' });
+            nonraidConfigureStatus.progress = Math.round(((i + 1) / dataDisks.length) * 100);
+        }
+
+        // Step 5: Mount disks
+        nonraidConfigureStatus.step = 'mount';
+        nonraidConfigureStatus.progress = 0;
+
+        for (let i = 0; i < dataDisks.length; i++) {
+            const mountPoint = `${NONRAID_MOUNT_PREFIX}${i + 1}`;
+            execSync(`sudo mkdir -p ${mountPoint}`, { encoding: 'utf8' });
+            nonraidConfigureStatus.progress = Math.round(((i + 1) / dataDisks.length) * 50);
+        }
+
+        execSync('sudo nmdctl mount', { encoding: 'utf8' });
+        nonraidConfigureStatus.progress = 100;
+
+        // Step 6: Configure Samba
+        nonraidConfigureStatus.step = 'samba';
+        nonraidConfigureStatus.progress = 0;
+        await updateSambaConfigForNonRAID(dataDisks.length, shareMode);
+        execSync('sudo systemctl restart smbd', { encoding: 'utf8' });
+        nonraidConfigureStatus.progress = 100;
+
+        // Step 7: Initial parity check
+        nonraidConfigureStatus.step = 'check';
+        nonraidConfigureStatus.progress = 0;
+
+        nonraidStatus.checking = true;
+        nonraidStatus.progress = 0;
+
+        const checkProcess = spawn('sudo', ['nmdctl', 'check']);
+
+        checkProcess.stdout.on('data', (data) => {
+            const match = data.toString().match(/(\d+)%/);
+            if (match) {
+                nonraidStatus.progress = parseInt(match[1]);
+                nonraidConfigureStatus.progress = parseInt(match[1]);
+            }
+        });
+
+        checkProcess.on('close', () => {
+            nonraidStatus.checking = false;
+            nonraidStatus.progress = 100;
+            nonraidConfigureStatus.active = false;
+            nonraidConfigureStatus.step = 'complete';
+            nonraidConfigureStatus.progress = 100;
+        });
+
+    } catch (error) {
+        nonraidConfigureStatus.error = error.message || 'Configuration failed';
+        nonraidConfigureStatus.active = false;
+        throw error;
+    }
+}
+
+async function updateSambaConfigForNonRAID(diskCount, shareMode) {
+    let sambaConfig = `[global]
+   workgroup = WORKGROUP
+   server string = HomePiNAS
+   security = user
+   map to guest = Bad User
+   server min protocol = SMB2
+   client min protocol = SMB2
+
+`;
+
+    if (shareMode === 'individual') {
+        for (let i = 1; i <= diskCount; i++) {
+            sambaConfig += `
+[Disk${i}]
+   path = ${NONRAID_MOUNT_PREFIX}${i}
+   browseable = yes
+   read only = no
+   valid users = @sambashare
+   create mask = 0664
+   directory mask = 0775
+   force group = sambashare
+`;
+        }
+    } else if (shareMode === 'merged') {
+        const diskPaths = [];
+        for (let i = 1; i <= diskCount; i++) {
+            diskPaths.push(`${NONRAID_MOUNT_PREFIX}${i}`);
+        }
+        const mergerPaths = diskPaths.join(':');
+        execSync('sudo mkdir -p /mnt/storage', { encoding: 'utf8' });
+        execSync(`sudo mergerfs ${mergerPaths} /mnt/storage -o defaults,allow_other,use_ino,category.create=mfs`, { encoding: 'utf8' });
+
+        sambaConfig += `
+[Storage]
+   path = /mnt/storage
+   browseable = yes
+   read only = no
+   valid users = @sambashare
+   create mask = 0664
+   directory mask = 0775
+   force group = sambashare
+`;
+    } else if (shareMode === 'categories') {
+        const categories = ['Media', 'Documents', 'Backups', 'Downloads', 'Photos', 'Projects'];
+        for (let i = 1; i <= diskCount; i++) {
+            const category = categories[i - 1] || `Disk${i}`;
+            sambaConfig += `
+[${category}]
+   path = ${NONRAID_MOUNT_PREFIX}${i}
+   browseable = yes
+   read only = no
+   valid users = @sambashare
+   create mask = 0664
+   directory mask = 0775
+   force group = sambashare
+`;
+        }
+    }
+
+    fs.writeFileSync('/tmp/smb.conf.new', sambaConfig);
+    execSync('sudo mv /tmp/smb.conf.new /etc/samba/smb.conf', { encoding: 'utf8' });
+}
+
+// GET /storage/array/configure/progress
+router.get('/array/configure/progress', (req, res) => {
+    res.json({
+        success: true,
+        ...nonraidConfigureStatus
+    });
+});
+
+// POST /storage/array/start
+router.post('/array/start', requireAuth, async (req, res) => {
+    if (getStorageBackend() !== 'nonraid') {
+        return res.status(400).json({ error: 'NonRAID backend not active' });
+    }
+    try {
+        execSync('sudo nmdctl start', { encoding: 'utf8' });
+        execSync('sudo nmdctl mount', { encoding: 'utf8' });
+        res.json({ success: true, message: 'Array started' });
+    } catch (error) {
+        console.error('Error starting array:', error);
+        res.status(500).json({ success: false, error: 'Failed to start array' });
+    }
+});
+
+// POST /storage/array/stop
+router.post('/array/stop', requireAuth, async (req, res) => {
+    if (getStorageBackend() !== 'nonraid') {
+        return res.status(400).json({ error: 'NonRAID backend not active' });
+    }
+    try {
+        execSync('sudo nmdctl unmount', { encoding: 'utf8' });
+        execSync('sudo nmdctl stop', { encoding: 'utf8' });
+        res.json({ success: true, message: 'Array stopped' });
+    } catch (error) {
+        console.error('Error stopping array:', error);
+        res.status(500).json({ success: false, error: 'Failed to stop array' });
+    }
+});
+
+// POST /storage/array/check
+router.post('/array/check', requireAuth, async (req, res) => {
+    if (getStorageBackend() !== 'nonraid') {
+        return res.status(400).json({ error: 'NonRAID backend not active' });
+    }
+    if (nonraidStatus.checking) {
+        return res.status(400).json({ success: false, error: 'Parity check already in progress' });
+    }
+
+    nonraidStatus.checking = true;
+    nonraidStatus.progress = 0;
+    nonraidStatus.error = null;
+
+    res.json({ success: true, message: 'Parity check started' });
+
+    const checkProcess = spawn('sudo', ['nmdctl', 'check']);
+
+    checkProcess.stdout.on('data', (data) => {
+        const match = data.toString().match(/(\d+)%/);
+        if (match) {
+            nonraidStatus.progress = parseInt(match[1]);
+        }
+    });
+
+    checkProcess.on('close', (code) => {
+        nonraidStatus.checking = false;
+        if (code !== 0) {
+            nonraidStatus.error = 'Parity check failed';
+        } else {
+            nonraidStatus.progress = 100;
+        }
+    });
+});
+
+// GET /storage/array/check/progress
+router.get('/array/check/progress', (req, res) => {
+    res.json({
+        success: true,
+        checking: nonraidStatus.checking,
+        progress: nonraidStatus.progress,
+        error: nonraidStatus.error
+    });
 });
 
 module.exports = router;

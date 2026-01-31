@@ -7,7 +7,10 @@
 set -e
 
 # Version - CHANGE THIS FOR EACH RELEASE
-VERSION="2.0.14"
+VERSION="3.0.0"
+
+# Storage backend (will be set by user selection)
+STORAGE_BACKEND=""
 
 # Colors
 RED='\033[0;31m'
@@ -42,7 +45,7 @@ $nrconf{kernelhints} = 0;
 NREOF
 
 TARGET_DIR="/opt/homepinas"
-REPO_URL="https://github.com/juanlusoft/homepinas-v2.git"
+REPO_URL="https://github.com/juanlusoft/homepinas-v3.git"
 BRANCH="main"
 FANCTL_SCRIPT="/usr/local/bin/homepinas-fanctl.sh"
 FANCTL_CONF="/usr/local/bin/homepinas-fanctl.conf"
@@ -110,6 +113,87 @@ echo -e "${CYAN}│${NC} Architecture:${GREEN}$ARCH${NC}"
 echo -e "${CYAN}│${NC} Raspberry Pi:${GREEN}$IS_RASPBERRY_PI${NC}"
 echo -e "${CYAN}│${NC} Testing/Dev: ${GREEN}$IS_TESTING${NC}"
 echo -e "${CYAN}└─────────────────────────────────────────┘${NC}"
+
+#######################################
+# PHASE 1.5: STORAGE BACKEND SELECTION
+#######################################
+echo -e ""
+echo -e "${BLUE}=========================================${NC}"
+echo -e "${BLUE}   Select Storage Backend               ${NC}"
+echo -e "${BLUE}=========================================${NC}"
+echo -e ""
+echo -e "${CYAN}┌─────────────────────────────────────────────────────────────┐${NC}"
+echo -e "${CYAN}│ Option 1: SnapRAID + MergerFS (Recommended for beginners)  │${NC}"
+echo -e "${CYAN}├─────────────────────────────────────────────────────────────┤${NC}"
+echo -e "${CYAN}│${NC} - Userspace solution (no kernel driver)                     ${NC}"
+echo -e "${CYAN}│${NC} - Scheduled parity sync (daily at 3 AM)                     ${NC}"
+echo -e "${CYAN}│${NC} - Unified pool at /mnt/storage (MergerFS)                   ${NC}"
+echo -e "${CYAN}│${NC} - Supports cache disk for faster writes                     ${NC}"
+echo -e "${CYAN}│${NC} - Works on all kernels                                      ${NC}"
+echo -e "${CYAN}└─────────────────────────────────────────────────────────────┘${NC}"
+echo -e ""
+echo -e "${CYAN}┌─────────────────────────────────────────────────────────────┐${NC}"
+echo -e "${CYAN}│ Option 2: NonRAID (Advanced - Real-time parity)            │${NC}"
+echo -e "${CYAN}├─────────────────────────────────────────────────────────────┤${NC}"
+echo -e "${CYAN}│${NC} - Kernel driver (like unRAID)                               ${NC}"
+echo -e "${CYAN}│${NC} - Real-time parity (no scheduled syncs)                     ${NC}"
+echo -e "${CYAN}│${NC} - Individual disk mounts at /mnt/disk[N]                    ${NC}"
+echo -e "${CYAN}│${NC} - No cache disk support                                     ${NC}"
+echo -e "${CYAN}│${NC} - ${YELLOW}NOT compatible with kernel 6.9 or 6.10${NC}                    ${NC}"
+echo -e "${CYAN}└─────────────────────────────────────────────────────────────┘${NC}"
+echo -e ""
+
+# Check kernel compatibility for NonRAID
+KERNEL_VERSION=$(uname -r | cut -d. -f1,2)
+KERNEL_MAJOR=$(echo $KERNEL_VERSION | cut -d. -f1)
+KERNEL_MINOR=$(echo $KERNEL_VERSION | cut -d. -f2)
+NONRAID_COMPATIBLE=true
+
+if [ "$KERNEL_MAJOR" -eq 6 ] && [ "$KERNEL_MINOR" -ge 9 ] && [ "$KERNEL_MINOR" -le 10 ]; then
+    NONRAID_COMPATIBLE=false
+    echo -e "${RED}WARNING: Your kernel $(uname -r) is NOT compatible with NonRAID${NC}"
+    echo -e "${YELLOW}NonRAID option will be disabled.${NC}"
+    echo -e ""
+fi
+
+while true; do
+    echo -e "${YELLOW}Select storage backend:${NC}"
+    if [ "$NONRAID_COMPATIBLE" = true ]; then
+        echo -e "  ${GREEN}1${NC}) SnapRAID + MergerFS"
+        echo -e "  ${GREEN}2${NC}) NonRAID"
+        read -p "Enter choice [1-2]: " storage_choice
+    else
+        echo -e "  ${GREEN}1${NC}) SnapRAID + MergerFS"
+        echo -e "  ${RED}2${NC}) NonRAID (unavailable - kernel incompatible)"
+        read -p "Enter choice [1]: " storage_choice
+        storage_choice=${storage_choice:-1}
+    fi
+
+    case $storage_choice in
+        1)
+            STORAGE_BACKEND="snapraid"
+            echo -e "${GREEN}Selected: SnapRAID + MergerFS${NC}"
+            break
+            ;;
+        2)
+            if [ "$NONRAID_COMPATIBLE" = true ]; then
+                STORAGE_BACKEND="nonraid"
+                echo -e "${GREEN}Selected: NonRAID${NC}"
+                break
+            else
+                echo -e "${RED}NonRAID is not available on your kernel. Please select option 1.${NC}"
+            fi
+            ;;
+        *)
+            echo -e "${RED}Invalid choice. Please enter 1 or 2.${NC}"
+            ;;
+    esac
+done
+
+# Save storage backend choice for the application
+echo "STORAGE_BACKEND=$STORAGE_BACKEND" > /tmp/homepinas-storage-backend
+
+echo -e ""
 
 #######################################
 # PHASE 2: REPOSITORY CONFIGURATION
@@ -382,9 +466,12 @@ install_docker || echo -e "${YELLOW}Continuing without Docker...${NC}"
 apt-get install -f -y $APT_OPTS 2>/dev/null || true
 
 #######################################
-# PHASE 4: INSTALL SNAPRAID + MERGERFS
+# PHASE 4: INSTALL STORAGE BACKEND
 #######################################
-echo -e "${BLUE}[4/7] Installing SnapRAID + MergerFS...${NC}"
+echo -e "${BLUE}[4/7] Installing storage backend ($STORAGE_BACKEND)...${NC}"
+
+if [ "$STORAGE_BACKEND" = "snapraid" ]; then
+    echo -e "${BLUE}Installing SnapRAID + MergerFS...${NC}"
 
 # Install MergerFS
 install_mergerfs() {
@@ -475,6 +562,41 @@ install_snapraid() {
 
 install_snapraid
 
+fi  # End SnapRAID section
+
+# NonRAID Installation
+if [ "$STORAGE_BACKEND" = "nonraid" ]; then
+    echo -e "${BLUE}Installing NonRAID...${NC}"
+
+    # Install dependencies
+    apt-get install -y $APT_OPTS linux-headers-$(uname -r) dkms gdisk xfsprogs
+
+    # Add NonRAID PPA and install
+    echo -e "${BLUE}Adding NonRAID repository...${NC}"
+    curl -fsSL https://qvr.github.io/nonraid/KEY.gpg | gpg --dearmor -o /usr/share/keyrings/nonraid-archive-keyring.gpg 2>/dev/null || true
+    echo "deb [signed-by=/usr/share/keyrings/nonraid-archive-keyring.gpg] https://qvr.github.io/nonraid/apt stable main" > /etc/apt/sources.list.d/nonraid.list
+
+    apt-get update -qq
+    if apt-get install -y $APT_OPTS nonraid-dkms nonraid-tools 2>/dev/null; then
+        echo -e "${GREEN}NonRAID installed from repository${NC}"
+    else
+        echo -e "${YELLOW}Repository install failed, building from source...${NC}"
+        cd /tmp
+        git clone https://github.com/qvr/nonraid.git
+        cd nonraid
+        make && make install
+        cd /tmp
+        rm -rf nonraid
+    fi
+
+    # Verify installation
+    if command -v nmdctl &> /dev/null; then
+        echo -e "${GREEN}NonRAID installed successfully${NC}"
+    else
+        echo -e "${RED}NonRAID installation failed${NC}"
+    fi
+fi  # End NonRAID section
+
 #######################################
 # PHASE 5: CONFIGURE SAMBA
 #######################################
@@ -547,21 +669,29 @@ else
     getent group sambashare > /dev/null || groupadd sambashare
 fi
 
-# Create mount directories
+# Create mount directories based on storage backend
 echo -e "${BLUE}Creating storage directories...${NC}"
-mkdir -p "$STORAGE_MOUNT_BASE"
-mkdir -p "$POOL_MOUNT"
-mkdir -p /mnt/parity1
-mkdir -p /mnt/parity2
 
-# Create disk mount points for up to 6 data disks
-for i in 1 2 3 4 5 6; do
-    mkdir -p "${STORAGE_MOUNT_BASE}/disk${i}"
-done
+if [ "$STORAGE_BACKEND" = "snapraid" ]; then
+    mkdir -p "$STORAGE_MOUNT_BASE"
+    mkdir -p "$POOL_MOUNT"
+    mkdir -p /mnt/parity1
+    mkdir -p /mnt/parity2
 
-# Create cache mount point for NVMe
-mkdir -p "${STORAGE_MOUNT_BASE}/cache1"
-mkdir -p "${STORAGE_MOUNT_BASE}/cache2"
+    # Create disk mount points for up to 6 data disks
+    for i in 1 2 3 4 5 6; do
+        mkdir -p "${STORAGE_MOUNT_BASE}/disk${i}"
+    done
+
+    # Create cache mount point for NVMe
+    mkdir -p "${STORAGE_MOUNT_BASE}/cache1"
+    mkdir -p "${STORAGE_MOUNT_BASE}/cache2"
+else
+    # NonRAID: simpler structure
+    for i in 1 2 3 4 5 6; do
+        mkdir -p "/mnt/disk${i}"
+    done
+fi
 
 #######################################
 # PHASE 6: DEPLOY APPLICATION
@@ -949,6 +1079,10 @@ $REAL_USER ALL=(ALL) NOPASSWD: /sbin/mkfs.xfs /dev/nvme[0-9]n[0-9]p[0-9]*
 $REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid *
 $REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/mergerfs *
 
+# NonRAID
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl *
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/sbin/sgdisk *
+
 # Systemctl (only specific services)
 $REAL_USER ALL=(ALL) NOPASSWD: /bin/systemctl daemon-reload
 $REAL_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart smbd
@@ -1039,11 +1173,26 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+# Save storage backend configuration for the application
+echo -e "${BLUE}Saving storage backend configuration...${NC}"
+cat > $TARGET_DIR/backend/storage-backend.conf <<EOF
+# HomePiNAS Storage Backend Configuration
+# Generated by installer v${VERSION}
+STORAGE_BACKEND=$STORAGE_BACKEND
+EOF
+chown $REAL_USER:$REAL_USER $TARGET_DIR/backend/storage-backend.conf
+
 # Main HomePiNAS service
+if [ "$STORAGE_BACKEND" = "nonraid" ]; then
+    SERVICE_AFTER="network.target docker.service nonraid.service"
+else
+    SERVICE_AFTER="network.target docker.service"
+fi
+
 cat > /etc/systemd/system/homepinas.service <<EOF
 [Unit]
 Description=HomePiNAS Backend Service
-After=network.target docker.service
+After=$SERVICE_AFTER
 Wants=homepinas-fanctl.timer
 
 [Service]
@@ -1054,6 +1203,7 @@ WorkingDirectory=$TARGET_DIR
 ExecStart=$(which node) $TARGET_DIR/backend/index.js
 Restart=always
 Environment=NODE_ENV=production
+Environment=STORAGE_BACKEND=$STORAGE_BACKEND
 
 [Install]
 WantedBy=multi-user.target
@@ -1070,8 +1220,15 @@ if [ -f "$FANCTL_SCRIPT" ]; then
     systemctl start homepinas-fanctl.timer || true
 fi
 
-# Enable snapraid sync timer (will only work after storage is configured)
-systemctl enable homepinas-snapraid-sync.timer || true
+# Enable snapraid sync timer only for SnapRAID backend
+if [ "$STORAGE_BACKEND" = "snapraid" ]; then
+    systemctl enable homepinas-snapraid-sync.timer || true
+fi
+
+# Enable NonRAID service if selected
+if [ "$STORAGE_BACKEND" = "nonraid" ]; then
+    systemctl enable nonraid || true
+fi
 
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}    SECURE INSTALLATION COMPLETE!       ${NC}"
@@ -1096,21 +1253,36 @@ echo -e "  - Input sanitization (command injection protection)"
 echo -e "  - Restricted sudoers permissions"
 echo -e "  - Fan control with PWM curves and ${GREEN}hysteresis${NC}"
 echo -e "  - ${GREEN}OTA updates${NC} from dashboard"
-echo -e "  - ${GREEN}SnapRAID${NC} parity protection"
-echo -e "  - ${GREEN}MergerFS${NC} disk pooling"
+if [ "$STORAGE_BACKEND" = "snapraid" ]; then
+    echo -e "  - ${GREEN}SnapRAID${NC} parity protection (scheduled)"
+    echo -e "  - ${GREEN}MergerFS${NC} disk pooling"
+else
+    echo -e "  - ${GREEN}NonRAID${NC} real-time parity protection"
+fi
 echo -e "  - ${GREEN}Samba${NC} network file sharing"
 echo -e ""
-echo -e "${YELLOW}Storage:${NC}"
-echo -e "  - Data disks mount: ${STORAGE_MOUNT_BASE}/disk[1-6]"
-echo -e "  - Parity disks mount: /mnt/parity[1-2]"
-echo -e "  - Cache (NVMe) mount: ${STORAGE_MOUNT_BASE}/cache[1-2]"
-echo -e "  - Merged pool: ${POOL_MOUNT}"
-echo -e "  - SnapRAID sync: Daily at 3:00 AM"
+echo -e "${YELLOW}Storage Backend: ${GREEN}$STORAGE_BACKEND${NC}"
+if [ "$STORAGE_BACKEND" = "snapraid" ]; then
+    echo -e "  - Data disks mount: ${STORAGE_MOUNT_BASE}/disk[1-6]"
+    echo -e "  - Parity disks mount: /mnt/parity[1-2]"
+    echo -e "  - Cache (NVMe) mount: ${STORAGE_MOUNT_BASE}/cache[1-2]"
+    echo -e "  - Merged pool: ${POOL_MOUNT}"
+    echo -e "  - SnapRAID sync: Daily at 3:00 AM"
+else
+    echo -e "  - Data disks mount: /mnt/disk[1-6]"
+    echo -e "  - Parity: Real-time (no scheduled sync)"
+    echo -e "  - No cache disk support"
+fi
 echo -e ""
 echo -e "${YELLOW}Network Share (SMB):${NC}"
-echo -e "  - Share name: ${GREEN}Storage${NC}"
-echo -e "  - Path: ${POOL_MOUNT}"
-echo -e "  - Access: \\\\\\\\$(hostname -I | awk '{print \$1}')\\\\Storage"
+if [ "$STORAGE_BACKEND" = "snapraid" ]; then
+    echo -e "  - Share name: ${GREEN}Storage${NC}"
+    echo -e "  - Path: ${POOL_MOUNT}"
+    echo -e "  - Access: \\\\\\\\$(hostname -I | awk '{print \$1}')\\\\Storage"
+else
+    echo -e "  - Shares configured per disk or unified (your choice)"
+    echo -e "  - Access: \\\\\\\\$(hostname -I | awk '{print \$1}')\\\\Disk[N]"
+fi
 echo -e "  - User/Pass: Same as dashboard credentials"
 echo -e ""
 echo -e "${YELLOW}Fan control modes:${NC}"
@@ -1141,5 +1313,9 @@ fi
 echo -e ""
 echo -e "${BLUE}Logs:${NC}"
 echo -e "  Fan control: journalctl -u homepinas-fanctl -f"
-echo -e "  SnapRAID:    tail -f /var/log/snapraid-sync.log"
+if [ "$STORAGE_BACKEND" = "snapraid" ]; then
+    echo -e "  SnapRAID:    tail -f /var/log/snapraid-sync.log"
+else
+    echo -e "  NonRAID:     sudo nmdctl status"
+fi
 echo -e "${GREEN}=========================================${NC}"
