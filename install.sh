@@ -161,11 +161,13 @@ while true; do
     if [ "$NONRAID_COMPATIBLE" = true ]; then
         echo -e "  ${GREEN}1${NC}) SnapRAID + MergerFS"
         echo -e "  ${GREEN}2${NC}) NonRAID"
-        read -p "Enter choice [1-2]: " storage_choice
+        echo -n "Enter choice [1-2]: "
+        read storage_choice </dev/tty
     else
         echo -e "  ${GREEN}1${NC}) SnapRAID + MergerFS"
         echo -e "  ${RED}2${NC}) NonRAID (unavailable - kernel incompatible)"
-        read -p "Enter choice [1]: " storage_choice
+        echo -n "Enter choice [1]: "
+        read storage_choice </dev/tty
         storage_choice=${storage_choice:-1}
     fi
 
