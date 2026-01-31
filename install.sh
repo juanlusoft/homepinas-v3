@@ -7,7 +7,7 @@
 set -e
 
 # Version - CHANGE THIS FOR EACH RELEASE
-VERSION="3.0.2"
+VERSION="3.0.3"
 
 # Storage backend (will be set by user selection)
 STORAGE_BACKEND=""
