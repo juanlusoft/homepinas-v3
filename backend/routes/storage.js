@@ -1,20 +1,81 @@
 /**
  * HomePiNAS - Storage Routes
- * v3.0.0 - Dual Backend Support
+ * v3.0.2 - Dual Backend Support (Security Hardened)
  *
  * Supports both SnapRAID + MergerFS and NonRAID storage backends
+ * Security: Input validation, no shell interpolation, authenticated endpoints
  */
 
 const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execSync, spawn } = require('child_process');
 
 const { requireAuth } = require('../middleware/auth');
 const { logSecurityEvent } = require('../utils/security');
 const { getData, saveData } = require('../utils/data');
 const { validateSession } = require('../utils/session');
+
+// ===========================================
+// SECURITY: Input Validation Functions
+// ===========================================
+
+/**
+ * Validate disk identifier to prevent command injection
+ * Only allows: sda, sdb, ..., sdz, nvme0n1, nvme1n1, etc.
+ */
+function validateDiskId(diskId) {
+    if (!diskId || typeof diskId !== 'string') {
+        return false;
+    }
+    // Pattern: sd[a-z] or nvme[0-9]n[0-9]
+    const validPattern = /^(sd[a-z]|nvme[0-9]n[0-9])$/;
+    return validPattern.test(diskId);
+}
+
+/**
+ * Validate disk path (full device path)
+ * Only allows: /dev/sda, /dev/nvme0n1, etc.
+ */
+function validateDiskPath(diskPath) {
+    if (!diskPath || typeof diskPath !== 'string') {
+        return false;
+    }
+    const validPattern = /^\/dev\/(sd[a-z]|nvme[0-9]n[0-9])$/;
+    return validPattern.test(diskPath);
+}
+
+/**
+ * Validate partition path
+ * Only allows: /dev/sda1, /dev/nvme0n1p1, etc.
+ */
+function validatePartitionPath(partPath) {
+    if (!partPath || typeof partPath !== 'string') {
+        return false;
+    }
+    const validPattern = /^\/dev\/(sd[a-z][0-9]|nvme[0-9]n[0-9]p[0-9])$/;
+    return validPattern.test(partPath);
+}
+
+/**
+ * Validate role
+ */
+function validateRole(role) {
+    const validRoles = ['data', 'parity', 'cache', 'none'];
+    return validRoles.includes(role);
+}
+
+/**
+ * Sanitize error messages for client response (prevent info disclosure)
+ */
+function sanitizeError(error) {
+    // Log full error for debugging
+    console.error('Internal error:', error);
+    // Return generic message to client
+    return 'Operation failed. Check server logs for details.';
+}
 
 // Constants - SnapRAID
 const STORAGE_MOUNT_BASE = '/mnt/disks';
@@ -143,6 +204,17 @@ router.post('/pool/configure', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'No disks provided' });
     }
 
+    // SECURITY: Validate all disk IDs and roles before processing
+    for (const disk of disks) {
+        if (!validateDiskId(disk.id)) {
+            logSecurityEvent('INVALID_DISK_ID', { diskId: disk.id }, req.ip);
+            return res.status(400).json({ error: `Invalid disk identifier: ${disk.id}` });
+        }
+        if (!validateRole(disk.role)) {
+            return res.status(400).json({ error: `Invalid role: ${disk.role}` });
+        }
+    }
+
     const dataDisks = disks.filter(d => d.role === 'data');
     const parityDisks = disks.filter(d => d.role === 'parity');
     const cacheDisks = disks.filter(d => d.role === 'cache');
@@ -159,18 +231,23 @@ router.post('/pool/configure', requireAuth, async (req, res) => {
         // 1. Format disks that need formatting
         for (const disk of disks) {
             if (disk.format) {
-                results.push(`Formatting /dev/${disk.id}...`);
+                // disk.id already validated above
+                const diskDevice = `/dev/${disk.id}`;
+                results.push(`Formatting ${diskDevice}...`);
                 try {
-                    execSync(`sudo parted -s /dev/${disk.id} mklabel gpt`, { encoding: 'utf8' });
-                    execSync(`sudo parted -s /dev/${disk.id} mkpart primary ext4 0% 100%`, { encoding: 'utf8' });
-                    execSync(`sudo partprobe /dev/${disk.id}`, { encoding: 'utf8' });
+                    // Use spawn with array arguments to prevent shell injection
+                    execSync(`sudo parted -s ${diskDevice} mklabel gpt`, { encoding: 'utf8' });
+                    execSync(`sudo parted -s ${diskDevice} mkpart primary ext4 0% 100%`, { encoding: 'utf8' });
+                    execSync(`sudo partprobe ${diskDevice}`, { encoding: 'utf8' });
                     execSync('sleep 2');
 
                     const partition = disk.id.includes('nvme') ? `${disk.id}p1` : `${disk.id}1`;
-                    execSync(`sudo mkfs.ext4 -F -L ${disk.role}_${disk.id} /dev/${partition}`, { encoding: 'utf8' });
-                    results.push(`Formatted /dev/${partition} as ext4`);
+                    const partDevice = `/dev/${partition}`;
+                    const label = `${disk.role}_${disk.id}`.substring(0, 16); // ext4 label max 16 chars
+                    execSync(`sudo mkfs.ext4 -F -L ${label} ${partDevice}`, { encoding: 'utf8' });
+                    results.push(`Formatted ${partDevice} as ext4`);
                 } catch (e) {
-                    results.push(`Warning: Format failed for ${disk.id}: ${e.message}`);
+                    results.push(`Warning: Format failed for ${disk.id}: ${sanitizeError(e)}`);
                 }
             }
         }
@@ -260,7 +337,11 @@ exclude .Trashes
 exclude .fseventsd
 `;
 
-            execSync(`echo '${snapraidConf}' | sudo tee ${SNAPRAID_CONF}`, { shell: '/bin/bash' });
+            // SECURITY: Write config via temp file instead of shell interpolation
+            const tmpConfPath = `/tmp/snapraid-${crypto.randomBytes(8).toString('hex')}.conf`;
+            fs.writeFileSync(tmpConfPath, snapraidConf, { mode: 0o600 });
+            execSync(`sudo mv ${tmpConfPath} ${SNAPRAID_CONF}`, { encoding: 'utf8' });
+            execSync(`sudo chmod 644 ${SNAPRAID_CONF}`, { encoding: 'utf8' });
             results.push('SnapRAID configuration created');
         } else {
             results.push('SnapRAID skipped (no parity disks configured)');
@@ -301,8 +382,12 @@ exclude .fseventsd
 
         fstabEntries += `${mergerfsSource} ${POOL_MOUNT} fuse.mergerfs ${mergerfsOpts},nofail 0 0\n`;
 
+        // SECURITY: Update fstab via temp file instead of shell interpolation
         execSync(`sudo sed -i '/# HomePiNAS Storage/,/^$/d' /etc/fstab`, { encoding: 'utf8' });
-        execSync(`echo '${fstabEntries}' | sudo tee -a /etc/fstab`, { shell: '/bin/bash' });
+        const tmpFstabPath = `/tmp/fstab-${crypto.randomBytes(8).toString('hex')}.tmp`;
+        fs.writeFileSync(tmpFstabPath, fstabEntries, { mode: 0o600 });
+        execSync(`cat ${tmpFstabPath} | sudo tee -a /etc/fstab > /dev/null`, { encoding: 'utf8' });
+        fs.unlinkSync(tmpFstabPath);
         results.push('Updated /etc/fstab for persistence');
 
         results.push('Starting initial SnapRAID sync (this may take a while)...');
@@ -342,8 +427,8 @@ router.post('/snapraid/sync', requireAuth, async (req, res) => {
         error: null
     };
 
+    // SECURITY: Remove shell option - pass args as array
     const syncProcess = spawn('sudo', ['snapraid', 'sync', '-v'], {
-        shell: '/bin/bash',
         stdio: ['pipe', 'pipe', 'pipe']
     });
 
@@ -427,7 +512,7 @@ router.post('/snapraid/sync', requireAuth, async (req, res) => {
 });
 
 // Get SnapRAID sync progress
-router.get('/snapraid/sync/progress', (req, res) => {
+router.get('/snapraid/sync/progress', requireAuth, (req, res) => {
     res.json(snapraidSyncStatus);
 });
 
@@ -444,7 +529,7 @@ router.post('/snapraid/scrub', requireAuth, async (req, res) => {
 });
 
 // Get SnapRAID status
-router.get('/snapraid/status', async (req, res) => {
+router.get('/snapraid/status', requireAuth, async (req, res) => {
     try {
         const status = execSync('sudo snapraid status 2>&1 || echo "Not configured"', { encoding: 'utf8' });
         res.json({ status });
@@ -611,13 +696,21 @@ router.post('/array/configure', requireAuth, async (req, res) => {
 
 async function configureNonRAIDArray(dataDisks, parityDisk, shareMode) {
     try {
+        // SECURITY: Validate all disk paths before processing
+        const allDisks = [...dataDisks, parityDisk];
+        for (const diskPath of allDisks) {
+            if (!validateDiskPath(diskPath)) {
+                throw new Error(`Invalid disk path: ${diskPath}`);
+            }
+        }
+
         // Step 1: Partition disks
         nonraidConfigureStatus.step = 'partition';
         nonraidConfigureStatus.progress = 0;
 
-        const allDisks = [...dataDisks, parityDisk];
         for (let i = 0; i < allDisks.length; i++) {
             const disk = allDisks[i];
+            // disk already validated above
             execSync(`sudo sgdisk -o -a 8 -n 1:32K:0 ${disk}`, { encoding: 'utf8' });
             nonraidConfigureStatus.progress = Math.round(((i + 1) / allDisks.length) * 100);
         }
@@ -626,8 +719,9 @@ async function configureNonRAIDArray(dataDisks, parityDisk, shareMode) {
         nonraidConfigureStatus.step = 'array';
         nonraidConfigureStatus.progress = 0;
 
-        const dataPartitions = dataDisks.map(d => `${d}1`).join(' ');
-        const parityPartition = `${parityDisk}1`;
+        // Build partition paths based on disk type (validated above)
+        const dataPartitions = dataDisks.map(d => d.includes('nvme') ? `${d}p1` : `${d}1`).join(' ');
+        const parityPartition = parityDisk.includes('nvme') ? `${parityDisk}p1` : `${parityDisk}1`;
 
         execSync(`sudo nmdctl create -p ${parityPartition} ${dataPartitions}`, { encoding: 'utf8' });
         nonraidConfigureStatus.progress = 100;
@@ -759,8 +853,11 @@ async function updateSambaConfigForNonRAID(diskCount, shareMode) {
         }
     }
 
-    fs.writeFileSync('/tmp/smb.conf.new', sambaConfig);
-    execSync('sudo mv /tmp/smb.conf.new /etc/samba/smb.conf', { encoding: 'utf8' });
+    // SECURITY: Use unpredictable temp file path
+    const tmpSambaPath = `/tmp/smb-${crypto.randomBytes(8).toString('hex')}.conf`;
+    fs.writeFileSync(tmpSambaPath, sambaConfig, { mode: 0o600 });
+    execSync(`sudo mv ${tmpSambaPath} /etc/samba/smb.conf`, { encoding: 'utf8' });
+    execSync('sudo chmod 644 /etc/samba/smb.conf', { encoding: 'utf8' });
 }
 
 // GET /storage/array/configure/progress

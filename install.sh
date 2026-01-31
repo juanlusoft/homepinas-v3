@@ -190,8 +190,10 @@ while true; do
     esac
 done
 
-# Save storage backend choice for the application
-echo "STORAGE_BACKEND=$STORAGE_BACKEND" > /tmp/homepinas-storage-backend
+# Save storage backend choice for the application (secure temp file)
+TEMP_STORAGE_FILE=$(mktemp /tmp/homepinas-storage-XXXXXX)
+chmod 600 "$TEMP_STORAGE_FILE"
+echo "STORAGE_BACKEND=$STORAGE_BACKEND" > "$TEMP_STORAGE_FILE"
 
 echo -e ""
 
@@ -1046,8 +1048,9 @@ usermod -aG docker $REAL_USER 2>/dev/null || true
 
 # Sudoers for system control, fan PWM, storage and Samba management
 cat > /etc/sudoers.d/homepinas <<EOF
-# HomePiNAS Sudoers - SECURITY HARDENED v1.5.2
+# HomePiNAS Sudoers - SECURITY HARDENED v3.0.2
 # Only allows specific commands with restricted arguments
+# Wildcards restricted to prevent command injection
 
 # System control (safe - no arguments needed)
 $REAL_USER ALL=(ALL) NOPASSWD: /sbin/reboot
@@ -1075,13 +1078,35 @@ $REAL_USER ALL=(ALL) NOPASSWD: /sbin/mkfs.ext4 /dev/nvme[0-9]n[0-9]p[0-9]*
 $REAL_USER ALL=(ALL) NOPASSWD: /sbin/mkfs.xfs /dev/sd[a-z][0-9]*
 $REAL_USER ALL=(ALL) NOPASSWD: /sbin/mkfs.xfs /dev/nvme[0-9]n[0-9]p[0-9]*
 
-# SnapRAID and MergerFS
-$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid *
-$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/mergerfs *
+# SnapRAID (restricted to safe subcommands only)
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid sync
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid sync -v
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid scrub
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid scrub -p [0-9]*
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid scrub -p [0-9]* -o [0-9]*
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid status
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid diff
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/snapraid smart
 
-# NonRAID
-$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl *
-$REAL_USER ALL=(ALL) NOPASSWD: /usr/sbin/sgdisk *
+# MergerFS (restricted to specific mount points)
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/mergerfs /mnt/disks/* /mnt/storage -o *
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/mergerfs /mnt/disk[0-9]\:/mnt/disk[0-9]* /mnt/storage -o *
+
+# NonRAID (restricted to safe subcommands only)
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl status
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl status -o json
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl start
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl stop
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl mount
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl unmount
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl check
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl create -p /dev/sd[a-z][0-9] /dev/sd[a-z][0-9]*
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl create -p /dev/nvme[0-9]n[0-9]p[0-9] /dev/sd[a-z][0-9]*
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/nmdctl create -p /dev/nvme[0-9]n[0-9]p[0-9] /dev/nvme[0-9]n[0-9]p[0-9]*
+
+# sgdisk (restricted to /dev/sd* and /dev/nvme* only)
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/sbin/sgdisk -o -a 8 -n 1\:32K\:0 /dev/sd[a-z]
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/sbin/sgdisk -o -a 8 -n 1\:32K\:0 /dev/nvme[0-9]n[0-9]
 
 # Systemctl (only specific services)
 $REAL_USER ALL=(ALL) NOPASSWD: /bin/systemctl daemon-reload
