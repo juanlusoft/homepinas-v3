@@ -143,54 +143,13 @@ echo -e "${CYAN}│${NC} - ${YELLOW}NOT compatible with kernel 6.9 or 6.10${NC} 
 echo -e "${CYAN}└─────────────────────────────────────────────────────────────┘${NC}"
 echo -e ""
 
-# Check kernel compatibility for NonRAID
-KERNEL_VERSION=$(uname -r | cut -d. -f1,2)
-KERNEL_MAJOR=$(echo $KERNEL_VERSION | cut -d. -f1)
-KERNEL_MINOR=$(echo $KERNEL_VERSION | cut -d. -f2)
-NONRAID_COMPATIBLE=true
-
-if [ "$KERNEL_MAJOR" -eq 6 ] && [ "$KERNEL_MINOR" -ge 9 ] && [ "$KERNEL_MINOR" -le 10 ]; then
-    NONRAID_COMPATIBLE=false
-    echo -e "${RED}WARNING: Your kernel $(uname -r) is NOT compatible with NonRAID${NC}"
-    echo -e "${YELLOW}NonRAID option will be disabled.${NC}"
-    echo -e ""
-fi
-
-while true; do
-    echo -e "${YELLOW}Select storage backend:${NC}"
-    if [ "$NONRAID_COMPATIBLE" = true ]; then
-        echo -e "  ${GREEN}1${NC}) SnapRAID + MergerFS"
-        echo -e "  ${GREEN}2${NC}) NonRAID"
-        echo -n "Enter choice [1-2]: "
-        read storage_choice </dev/tty
-    else
-        echo -e "  ${GREEN}1${NC}) SnapRAID + MergerFS"
-        echo -e "  ${RED}2${NC}) NonRAID (unavailable - kernel incompatible)"
-        echo -n "Enter choice [1]: "
-        read storage_choice </dev/tty
-        storage_choice=${storage_choice:-1}
-    fi
-
-    case $storage_choice in
-        1)
-            STORAGE_BACKEND="snapraid"
-            echo -e "${GREEN}Selected: SnapRAID + MergerFS${NC}"
-            break
-            ;;
-        2)
-            if [ "$NONRAID_COMPATIBLE" = true ]; then
-                STORAGE_BACKEND="nonraid"
-                echo -e "${GREEN}Selected: NonRAID${NC}"
-                break
-            else
-                echo -e "${RED}NonRAID is not available on your kernel. Please select option 1.${NC}"
-            fi
-            ;;
-        *)
-            echo -e "${RED}Invalid choice. Please enter 1 or 2.${NC}"
-            ;;
-    esac
-done
+# NonRAID is not yet publicly available - auto-select SnapRAID
+# When NonRAID becomes available, this section can be re-enabled
+echo -e "${YELLOW}Note: NonRAID driver is not yet publicly available.${NC}"
+echo -e "${YELLOW}Using SnapRAID + MergerFS (recommended and stable).${NC}"
+echo -e ""
+STORAGE_BACKEND="snapraid"
+echo -e "${GREEN}Selected: SnapRAID + MergerFS${NC}"
 
 # Save storage backend choice for the application (secure temp file)
 TEMP_STORAGE_FILE=$(mktemp /tmp/homepinas-storage-XXXXXX)
@@ -568,38 +527,12 @@ install_snapraid
 
 fi  # End SnapRAID section
 
-# NonRAID Installation
-if [ "$STORAGE_BACKEND" = "nonraid" ]; then
-    echo -e "${BLUE}Installing NonRAID...${NC}"
-
-    # Install dependencies
-    apt-get install -y $APT_OPTS linux-headers-$(uname -r) dkms gdisk xfsprogs
-
-    # Add NonRAID PPA and install
-    echo -e "${BLUE}Adding NonRAID repository...${NC}"
-    curl -fsSL https://qvr.github.io/nonraid/KEY.gpg | gpg --dearmor -o /usr/share/keyrings/nonraid-archive-keyring.gpg 2>/dev/null || true
-    echo "deb [signed-by=/usr/share/keyrings/nonraid-archive-keyring.gpg] https://qvr.github.io/nonraid/apt stable main" > /etc/apt/sources.list.d/nonraid.list
-
-    apt-get update -qq
-    if apt-get install -y $APT_OPTS nonraid-dkms nonraid-tools 2>/dev/null; then
-        echo -e "${GREEN}NonRAID installed from repository${NC}"
-    else
-        echo -e "${YELLOW}Repository install failed, building from source...${NC}"
-        cd /tmp
-        git clone https://github.com/qvr/nonraid.git
-        cd nonraid
-        make && make install
-        cd /tmp
-        rm -rf nonraid
-    fi
-
-    # Verify installation
-    if command -v nmdctl &> /dev/null; then
-        echo -e "${GREEN}NonRAID installed successfully${NC}"
-    else
-        echo -e "${RED}NonRAID installation failed${NC}"
-    fi
-fi  # End NonRAID section
+# NonRAID Installation (disabled - not yet publicly available)
+# This section will be enabled when NonRAID driver is released
+# if [ "$STORAGE_BACKEND" = "nonraid" ]; then
+#     echo -e "${BLUE}Installing NonRAID...${NC}"
+#     # ... NonRAID installation code ...
+# fi
 
 #######################################
 # PHASE 5: CONFIGURE SAMBA
