@@ -277,7 +277,7 @@ setupForm.addEventListener('submit', async (e) => {
     const username = document.getElementById('new-username').value.trim();
     const password = document.getElementById('new-password').value;
     const btn = e.target.querySelector('button');
-    btn.textContent = 'Hardware Sync...';
+    btn.textContent = t('auth.hardwareSync');
     btn.disabled = true;
 
     try {
@@ -290,9 +290,9 @@ setupForm.addEventListener('submit', async (e) => {
         const data = await res.json();
 
         if (!res.ok) {
-            alert(data.message || 'Setup failed');
+            alert(data.message || t('common.error'));
             btn.disabled = false;
-            btn.textContent = 'Initialize Gateway';
+            btn.textContent = t('auth.initializeGateway');
             return;
         }
 
@@ -307,9 +307,9 @@ setupForm.addEventListener('submit', async (e) => {
         initStorageSetup();
     } catch (e) {
         console.error('Setup error:', e);
-        alert('Hardware Link Failed');
+        alert(t('common.error'));
         btn.disabled = false;
-        btn.textContent = 'Initialize Gateway';
+        btn.textContent = t('auth.initializeGateway');
     }
 });
 
@@ -521,7 +521,7 @@ if (saveStorageBtn) {
         const parityDisks = selections.filter(s => s.role === 'parity');
 
         if (dataDisks.length === 0) {
-            alert('Please assign at least one disk as "Data" to create a pool.');
+            alert(t('storage.assignDataDisk'));
             return;
         }
 
@@ -548,13 +548,13 @@ if (saveStorageBtn) {
             const smallestParitySize = Math.min(...parityDisks.map(d => getDiskSize(d.id)));
 
             if (smallestParitySize < largestDataSize) {
-                alert('El disco de paridad debe ser igual o mayor que el disco de datos más grande.\n\nParity disk must be equal or larger than the largest data disk.');
+                alert(t('storage.parityTooSmall'));
                 return;
             }
         }
 
         const diskList = selections.map(s => `${s.id} (${s.role})`).join('\n');
-        const confirmed = confirm(`⚠️ WARNING: This will FORMAT the following disks:\n\n${diskList}\n\nAll data will be ERASED!\n\nDo you want to continue?`);
+        const confirmed = confirm(t('storage.formatConfirm').replace('{diskList}', diskList));
 
         if (!confirmed) return;
 
@@ -626,7 +626,7 @@ if (saveStorageBtn) {
             const progressMsg = document.getElementById('progress-message');
             if (progressMsg) {
                 // SECURITY: Escape poolMount to prevent XSS
-                progressMsg.innerHTML = `✅ <strong>Storage Pool Created!</strong><br>Pool mounted at: ${escapeHtml(data.poolMount)}`;
+                progressMsg.innerHTML = `✅ <strong>${t('progress.poolCreated')}</strong><br>${t('progress.poolMountedAt')}: ${escapeHtml(data.poolMount)}`;
             }
 
             // Show continue button
@@ -635,7 +635,7 @@ if (saveStorageBtn) {
                 progressFooter.classList.add('complete');
                 const continueBtn = document.createElement('button');
                 continueBtn.className = 'btn-primary';
-                continueBtn.textContent = 'Continue to Dashboard';
+                continueBtn.textContent = t('progress.continueToDashboard');
                 continueBtn.onclick = () => {
                     hideProgressModal();
                     if (state.sessionId) {
@@ -652,7 +652,7 @@ if (saveStorageBtn) {
             console.error('Storage config error:', e);
             const progressMsg = document.getElementById('progress-message');
             if (progressMsg) {
-                progressMsg.innerHTML = `❌ <strong>Configuration Failed:</strong><br>${escapeHtml(e.message)}`;
+                progressMsg.innerHTML = `❌ <strong>${t('progress.configurationFailed')}:</strong><br>${escapeHtml(e.message)}`;
             }
 
             // Add retry button
@@ -661,7 +661,7 @@ if (saveStorageBtn) {
                 progressFooter.classList.add('complete');
                 const retryBtn = document.createElement('button');
                 retryBtn.className = 'btn-primary';
-                retryBtn.textContent = 'Close & Retry';
+                retryBtn.textContent = t('progress.closeAndRetry');
                 retryBtn.onclick = () => {
                     hideProgressModal();
                     saveStorageBtn.disabled = false;
@@ -680,7 +680,7 @@ if (loginForm) {
         const password = document.getElementById('password').value;
         const btn = e.target.querySelector('button[type="submit"]');
 
-        btn.textContent = 'Hardware Auth...';
+        btn.textContent = t('auth.hardwareAuth');
         btn.disabled = true;
 
         try {
@@ -692,8 +692,8 @@ if (loginForm) {
             const data = await res.json();
 
             if (!res.ok || !data.success) {
-                alert(data.message || 'Security Error: Credentials Rejected by Hardware.');
-                btn.textContent = 'Access Gateway';
+                alert(data.message || t('common.error'));
+                btn.textContent = t('auth.accessGateway');
                 btn.disabled = false;
                 return;
             }
@@ -708,8 +708,8 @@ if (loginForm) {
             switchView('dashboard');
         } catch (e) {
             console.error('Login error:', e);
-            alert('Security Server Offline or Network Link Broken');
-            btn.textContent = 'Access Gateway';
+            alert(t('common.error'));
+            btn.textContent = t('auth.accessGateway');
             btn.disabled = false;
         }
     });
@@ -868,36 +868,36 @@ async function renderDashboard() {
         }
     } catch (e) {
         console.error('Error fetching disks:', e);
-        disksHtml = '<div class="no-disks">Unable to load disk information</div>';
+        disksHtml = `<div class="no-disks">${t('storage.unableToLoad')}</div>`;
     }
 
     dashboardContent.innerHTML = `
         <div class="glass-card overview-card" style="grid-column: 1 / -1;">
             <div class="overview-header">
-                <h3>System Overview</h3>
+                <h3>${t('dashboard.systemOverview')}</h3>
                 <div class="system-info-badge">
                     <span>${escapeHtml(stats.hostname || 'HomePiNAS')}</span>
                     <span class="separator">|</span>
                     <span>${escapeHtml(stats.distro || 'Linux')}</span>
                     <span class="separator">|</span>
-                    <span>Uptime: ${uptimeStr}</span>
+                    <span>${t('dashboard.uptime')}: ${uptimeStr}</span>
                 </div>
             </div>
         </div>
 
         <div class="dashboard-grid-4">
             <div class="glass-card card-compact">
-                <h3>🖥️ CPU</h3>
+                <h3>🖥️ ${t('dashboard.cpu')}</h3>
                 <div class="cpu-model-compact">${escapeHtml(cpuModel)}</div>
                 <div class="cpu-specs-row">
-                    <span>${stats.cpuPhysicalCores || 0} Cores</span>
-                    <span>${stats.cpuCores || 0} Threads</span>
+                    <span>${stats.cpuPhysicalCores || 0} ${t('dashboard.cores')}</span>
+                    <span>${stats.cpuCores || 0} ${t('dashboard.threads')}</span>
                     <span>${stats.cpuSpeed || 0} GHz</span>
                     <span class="temp-badge ${cpuTemp > 70 ? 'hot' : cpuTemp > 55 ? 'warm' : 'cool'}">${cpuTemp}°C</span>
                 </div>
                 <div class="load-section">
                     <div class="load-header">
-                        <span>Load</span>
+                        <span>${t('dashboard.load')}</span>
                         <span style="color: ${cpuLoad > 80 ? '#ef4444' : cpuLoad > 50 ? '#f59e0b' : '#10b981'}">${cpuLoad}%</span>
                     </div>
                     <div class="progress-bar-mini">
@@ -908,7 +908,7 @@ async function renderDashboard() {
             </div>
 
             <div class="glass-card card-compact">
-                <h3>💾 Memory</h3>
+                <h3>💾 ${t('dashboard.memory')}</h3>
                 <div class="memory-compact">
                     <div class="memory-circle-small">
                         <svg viewBox="0 0 36 36">
@@ -920,35 +920,35 @@ async function renderDashboard() {
                         <span class="memory-percent-small">${ramUsedPercent}%</span>
                     </div>
                     <div class="memory-details-compact">
-                        <div class="mem-row"><span>Used</span><span>${stats.ramUsed || 0} GB</span></div>
-                        <div class="mem-row"><span>Free</span><span>${stats.ramFree || 0} GB</span></div>
-                        <div class="mem-row"><span>Total</span><span>${stats.ramTotal || 0} GB</span></div>
-                        ${stats.swapTotal && parseFloat(stats.swapTotal) > 0 ? `<div class="mem-row swap"><span>Swap</span><span>${stats.swapUsed || 0}/${stats.swapTotal || 0} GB</span></div>` : ''}
+                        <div class="mem-row"><span>${t('dashboard.used')}</span><span>${stats.ramUsed || 0} GB</span></div>
+                        <div class="mem-row"><span>${t('dashboard.free')}</span><span>${stats.ramFree || 0} GB</span></div>
+                        <div class="mem-row"><span>${t('dashboard.total')}</span><span>${stats.ramTotal || 0} GB</span></div>
+                        ${stats.swapTotal && parseFloat(stats.swapTotal) > 0 ? `<div class="mem-row swap"><span>${t('dashboard.swap')}</span><span>${stats.swapUsed || 0}/${stats.swapTotal || 0} GB</span></div>` : ''}
                     </div>
                 </div>
             </div>
 
             <div class="glass-card card-compact">
-                <h3>🌀 Fans</h3>
+                <h3>🌀 ${t('dashboard.fans')}</h3>
                 <div class="fans-compact">
                     ${fansFullHtml}
                 </div>
             </div>
 
             <div class="glass-card card-compact">
-                <h3>🌐 Network</h3>
+                <h3>🌐 ${t('dashboard.network')}</h3>
                 <div class="network-compact">
-                    <div class="net-row"><span>Public IP</span><span class="ip-value">${publicIP}</span></div>
-                    <div class="net-row"><span>LAN IP</span><span>${lanIP}</span></div>
-                    <div class="net-row"><span>DDNS</span><span>${ddnsCount} Service(s)</span></div>
+                    <div class="net-row"><span>${t('dashboard.publicIP')}</span><span class="ip-value">${publicIP}</span></div>
+                    <div class="net-row"><span>${t('dashboard.lanIP')}</span><span>${lanIP}</span></div>
+                    <div class="net-row"><span>${t('dashboard.ddns')}</span><span>${ddnsCount} ${t('dashboard.services')}</span></div>
                 </div>
             </div>
         </div>
 
         <div class="glass-card storage-overview" style="grid-column: 1 / -1;">
-            <h3>💿 Connected Disks</h3>
+            <h3>💿 ${t('dashboard.connectedDisks')}</h3>
             <div class="disks-by-role">
-                ${disksHtml || '<div class="no-disks">No disks detected</div>'}
+                ${disksHtml || `<div class="no-disks">${t('storage.noDisksDetected')}</div>`}
             </div>
         </div>
     `;
@@ -1225,14 +1225,14 @@ async function renderStorageDashboard() {
         dashboardContent.appendChild(grid);
     } catch (e) {
         console.error('Storage dashboard error:', e);
-        dashboardContent.innerHTML = '<div class="glass-card"><h3>Error loading storage data</h3></div>';
+        dashboardContent.innerHTML = `<div class="glass-card"><h3>${t('storage.errorLoading')}</h3></div>`;
     }
 }
 
 // Real Docker Logic
 async function renderDockerManager() {
     // Show loading immediately
-    dashboardContent.innerHTML = "<div class=\"glass-card\" style=\"grid-column: 1 / -1; text-align: center; padding: 40px;\"><h3>Loading Docker Manager...</h3></div>";
+    dashboardContent.innerHTML = `<div class="glass-card" style="grid-column: 1 / -1; text-align: center; padding: 40px;"><h3>${t('docker.loading')}</h3></div>`;
     // Fetch containers and update status
     let updateStatus = { lastCheck: null, updatesAvailable: 0 };
     try {
@@ -1264,12 +1264,12 @@ async function renderDockerManager() {
     const headerLeft = document.createElement('div');
     const h3 = document.createElement('h3');
     h3.style.margin = '0';
-    h3.textContent = 'Containers';
+    h3.textContent = t('docker.containers');
     const updateInfo = document.createElement('span');
     updateInfo.style.cssText = 'font-size: 0.8rem; color: var(--text-dim); display: block; margin-top: 5px;';
     updateInfo.textContent = updateStatus.lastCheck
-        ? `Last check: ${new Date(updateStatus.lastCheck).toLocaleString()}`
-        : 'Updates not checked yet';
+        ? `${t('docker.lastCheck')}: ${new Date(updateStatus.lastCheck).toLocaleString()}`
+        : t('docker.notCheckedYet');
     headerLeft.appendChild(h3);
     headerLeft.appendChild(updateInfo);
 
@@ -1279,13 +1279,13 @@ async function renderDockerManager() {
     const checkUpdatesBtn = document.createElement('button');
     checkUpdatesBtn.className = 'btn-primary';
     checkUpdatesBtn.style.cssText = 'background: #6366f1; padding: 8px 16px; font-size: 0.85rem;';
-    checkUpdatesBtn.innerHTML = '🔄 Check Updates';
+    checkUpdatesBtn.innerHTML = '🔄 ' + t('docker.checkUpdates');
     checkUpdatesBtn.addEventListener('click', checkDockerUpdates);
 
     const importComposeBtn = document.createElement('button');
     importComposeBtn.className = 'btn-primary';
     importComposeBtn.style.cssText = 'background: #10b981; padding: 8px 16px; font-size: 0.85rem;';
-    importComposeBtn.innerHTML = '📦 Import Compose';
+    importComposeBtn.innerHTML = '📦 ' + t('docker.importCompose');
     importComposeBtn.addEventListener('click', openComposeModal);
 
     headerRight.appendChild(checkUpdatesBtn);
@@ -1300,8 +1300,8 @@ async function renderDockerManager() {
         emptyCard.className = 'glass-card';
         emptyCard.style.cssText = 'grid-column: 1/-1; text-align:center; padding: 40px;';
         emptyCard.innerHTML = `
-            <h4 style="color: var(--text-dim);">No Containers Detected</h4>
-            <p style="color: var(--text-dim); font-size: 0.9rem;">Import a docker-compose file or run containers manually.</p>
+            <h4 style="color: var(--text-dim);">${t('docker.noContainers')}</h4>
+            <p style="color: var(--text-dim); font-size: 0.9rem;">${t('docker.importComposeHint')}</p>
         `;
         dashboardContent.appendChild(emptyCard);
     } else {
@@ -1331,7 +1331,7 @@ async function renderDockerManager() {
             if (hasUpdate) {
                 const updateBadge = document.createElement('span');
                 updateBadge.style.cssText = 'background: #10b981; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;';
-                updateBadge.textContent = 'UPDATE';
+                updateBadge.textContent = t('docker.update');
                 nameRow.appendChild(updateBadge);
             }
 
@@ -1350,7 +1350,7 @@ async function renderDockerManager() {
                 background: ${isRunning ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
                 color: ${isRunning ? '#10b981' : '#ef4444'};
             `;
-            statusSpan.textContent = isRunning ? 'RUNNING' : 'STOPPED';
+            statusSpan.textContent = isRunning ? t('docker.running') : t('docker.stopped');
 
             header.appendChild(info);
             header.appendChild(statusSpan);
@@ -1482,7 +1482,7 @@ async function renderDockerManager() {
     if (composeFiles.length > 0) {
         const composeSectionTitle = document.createElement('h3');
         composeSectionTitle.style.cssText = 'grid-column: 1 / -1; margin-top: 30px; margin-bottom: 10px;';
-        composeSectionTitle.textContent = 'Docker Compose Files';
+        composeSectionTitle.textContent = t('docker.composeFiles');
         dashboardContent.appendChild(composeSectionTitle);
 
         const composeGrid = document.createElement('div');
@@ -1512,12 +1512,12 @@ async function renderDockerManager() {
 
             const runBtn = document.createElement('button');
             runBtn.style.cssText = 'flex: 1; padding: 8px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;';
-            runBtn.textContent = 'Run';
+            runBtn.textContent = t('docker.run');
             runBtn.addEventListener('click', () => runCompose(compose.name, runBtn));
 
             const stopBtn = document.createElement('button');
             stopBtn.style.cssText = 'flex: 1; padding: 8px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;';
-            stopBtn.textContent = 'Stop';
+            stopBtn.textContent = t('docker.stop');
             stopBtn.addEventListener('click', () => stopCompose(compose.name, stopBtn));
 
             const deleteBtn = document.createElement('button');
@@ -1542,31 +1542,31 @@ async function renderDockerManager() {
 async function checkDockerUpdates() {
     const btn = event.target;
     btn.disabled = true;
-    btn.innerHTML = '🔄 Checking...';
+    btn.innerHTML = '🔄 ' + t('docker.checkingUpdates');
 
     try {
         const res = await authFetch(`${API_BASE}/docker/check-updates`, { method: 'POST' });
         const data = await res.json();
 
-        if (!res.ok) throw new Error(data.error || 'Check failed');
+        if (!res.ok) throw new Error(data.error || t('common.error'));
 
-        alert(`Update check complete!\n\nImages checked: ${data.totalImages}\nUpdates available: ${data.updatesAvailable}`);
+        alert(`${t('docker.updateCheckComplete')}\n\n${t('docker.imagesChecked')}: ${data.totalImages}\n${t('docker.updatesAvailable')}: ${data.updatesAvailable}`);
         renderContent('docker');
     } catch (e) {
         console.error('Docker update check error:', e);
-        alert('Error: ' + e.message);
+        alert(t('common.error') + ': ' + e.message);
         btn.disabled = false;
-        btn.innerHTML = '🔄 Check Updates';
+        btn.innerHTML = '🔄 ' + t('docker.checkUpdates');
     }
 }
 
 async function updateContainer(containerId, containerName, btn) {
-    if (!confirm(`Update container "${containerName}"?\n\nThis will:\n1. Stop the container\n2. Pull the latest image\n3. Recreate the container\n\nVolumes and data will be preserved.`)) {
+    if (!confirm(t('docker.updateConfirm').replace('{name}', containerName))) {
         return;
     }
 
     btn.disabled = true;
-    btn.innerHTML = '⏳ Updating...';
+    btn.innerHTML = '⏳ ' + t('docker.updating');
 
     try {
         const res = await authFetch(`${API_BASE}/docker/update`, {
@@ -1575,15 +1575,15 @@ async function updateContainer(containerId, containerName, btn) {
         });
         const data = await res.json();
 
-        if (!res.ok) throw new Error(data.error || 'Update failed');
+        if (!res.ok) throw new Error(data.error || t('common.error'));
 
-        alert(`Container "${containerName}" updated successfully!`);
+        alert(t('docker.updateSuccess').replace('{name}', containerName));
         renderContent('docker');
     } catch (e) {
         console.error('Container update error:', e);
-        alert('Update failed: ' + e.message);
+        alert(t('common.error') + ': ' + e.message);
         btn.disabled = false;
-        btn.innerHTML = '⬆️ Update Container';
+        btn.innerHTML = '⬆️ ' + t('docker.updateContainer');
     }
 }
 
@@ -1600,15 +1600,15 @@ function openComposeModal() {
     modal.innerHTML = `
         <div style="background: var(--card-bg); padding: 30px; border-radius: 16px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="margin: 0;">Import Docker Compose</h3>
+                <h3 style="margin: 0;">${t('docker.importCompose')}</h3>
                 <button id="close-compose-modal" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;">&times;</button>
             </div>
             <div class="input-group" style="margin-bottom: 15px;">
                 <input type="text" id="compose-name" placeholder=" " required>
-                <label>Stack Name</label>
+                <label>${t('docker.stackName')}</label>
             </div>
             <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 8px; color: var(--text-dim);">docker-compose.yml content:</label>
+                <label style="display: block; margin-bottom: 8px; color: var(--text-dim);">${t('docker.composeContent')}:</label>
                 <div style="display: flex; gap: 10px; margin-bottom: 10px;">
                     <label style="
                         flex: 1; padding: 12px; background: rgba(99, 102, 241, 0.2);
@@ -1616,7 +1616,7 @@ function openComposeModal() {
                         color: #6366f1; text-align: center; cursor: pointer;
                         transition: all 0.2s ease;
                     ">
-                        📁 Upload .yml file
+                        📁 ${t('docker.uploadYml')}
                         <input type="file" id="compose-file-input" accept=".yml,.yaml" style="display: none;">
                     </label>
                 </div>
@@ -1632,8 +1632,8 @@ services:
       - '8080:80'"></textarea>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button id="save-compose-btn" class="btn-primary" style="flex: 1; padding: 12px;">Save Compose</button>
-                <button id="save-run-compose-btn" class="btn-primary" style="flex: 1; padding: 12px; background: #10b981;">Save & Run</button>
+                <button id="save-compose-btn" class="btn-primary" style="flex: 1; padding: 12px;">${t('docker.saveCompose')}</button>
+                <button id="save-run-compose-btn" class="btn-primary" style="flex: 1; padding: 12px; background: #10b981;">${t('docker.saveAndRun')}</button>
             </div>
         </div>
     `;
@@ -1670,11 +1670,11 @@ async function saveCompose(andRun) {
     const content = document.getElementById("compose-content").value;
 
     if (!name) {
-        alert("Please enter a stack name");
+        alert(t('docker.enterStackName'));
         return;
     }
     if (!content) {
-        alert("Please enter compose content");
+        alert(t('docker.enterComposeContent'));
         return;
     }
 
@@ -1682,30 +1682,30 @@ async function saveCompose(andRun) {
     const modal = document.getElementById("compose-modal");
     const modalContent = modal.querySelector("div");
     modalContent.innerHTML = `
-        <h3 style="margin: 0 0 20px 0;">Deploying Stack: ${escapeHtml(name)}</h3>
+        <h3 style="margin: 0 0 20px 0;">${t('docker.deployingStack')}: ${escapeHtml(name)}</h3>
         <div id="deploy-steps">
             <div class="deploy-step" id="step-save">
                 <span class="step-icon">⏳</span>
-                <span class="step-text">Saving compose file...</span>
+                <span class="step-text">${t('docker.savingCompose')}</span>
             </div>
             ${andRun ? `<div class="deploy-step" id="step-pull">
                 <span class="step-icon">⏳</span>
-                <span class="step-text">Pulling images...</span>
+                <span class="step-text">${t('docker.pullingImages')}</span>
             </div>
             <div class="deploy-step" id="step-start">
                 <span class="step-icon">⏳</span>
-                <span class="step-text">Starting containers...</span>
+                <span class="step-text">${t('docker.startingContainers')}</span>
             </div>` : ""}
         </div>
         <div style="margin: 20px 0;">
             <div style="background: rgba(255,255,255,0.1); border-radius: 8px; height: 8px; overflow: hidden;">
                 <div id="deploy-progress" style="height: 100%; background: linear-gradient(90deg, #6366f1, #10b981); width: 0%; transition: width 0.3s ease;"></div>
             </div>
-            <div id="deploy-status" style="margin-top: 10px; font-size: 0.9rem; color: var(--text-dim); text-align: center;">Initializing...</div>
+            <div id="deploy-status" style="margin-top: 10px; font-size: 0.9rem; color: var(--text-dim); text-align: center;">${t('docker.initializing')}</div>
         </div>
         <div id="deploy-log" style="display: none; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px; font-family: monospace; font-size: 0.8rem; max-height: 200px; overflow-y: auto; white-space: pre-wrap;"></div>
         <div id="deploy-actions" style="display: none; text-align: center;">
-            <button id="deploy-close-btn" class="btn-primary" style="padding: 12px 30px;">Accept</button>
+            <button id="deploy-close-btn" class="btn-primary" style="padding: 12px 30px;">${t('common.accept')}</button>
         </div>
     `;
 
@@ -1735,7 +1735,7 @@ async function saveCompose(andRun) {
             logDiv.style.color = "#ef4444";
         }
         if (btn) {
-            btn.textContent = success ? "Accept" : "Close";
+            btn.textContent = success ? t('common.accept') : t('common.close');
             btn.style.background = success ? "#10b981" : "#ef4444";
             btn.onclick = () => {
                 modal.remove();
@@ -1759,12 +1759,12 @@ async function saveCompose(andRun) {
         if (!res.ok) throw new Error(data.error || "Import failed");
         
         updateStep("step-save", "done");
-        updateProgress(andRun ? 33 : 100, andRun ? "Compose saved, starting deployment..." : "Compose saved successfully!");
+        updateProgress(andRun ? 33 : 100, andRun ? t('docker.savingCompose') : t('docker.composeSaved') + ' ✅');
 
         if (andRun) {
             // Step 2: Pull & Start
             updateStep("step-pull", "active");
-            updateProgress(50, "Pulling images and starting containers...");
+            updateProgress(50, t('docker.pullingImages'));
 
             const runRes = await authFetch(`${API_BASE}/docker/compose/up`, {
                 method: "POST",
@@ -1775,27 +1775,27 @@ async function saveCompose(andRun) {
             if (!runRes.ok) {
                 updateStep("step-pull", "error");
                 updateStep("step-start", "error");
-                throw new Error(runData.error || runData.output || "Run failed");
+                throw new Error(runData.error || runData.output || t('common.error'));
             }
 
             updateStep("step-pull", "done");
             updateStep("step-start", "done");
-            showResult(true, "Stack deployed successfully! ✅");
+            showResult(true, t('docker.deploySuccess') + ' ✅');
         } else {
-            showResult(true, "Compose file saved! ✅");
+            showResult(true, t('docker.composeSaved') + ' ✅');
         }
 
     } catch (e) {
         console.error("Compose deploy error:", e);
         const currentStep = document.querySelector(".deploy-step.active");
         if (currentStep) currentStep.classList.replace("active", "error");
-        showResult(false, "Deployment failed ❌", e.message);
+        showResult(false, t('docker.deployFailed') + ' ❌', e.message);
     }
 }
 
 async function runCompose(name, btn) {
     btn.disabled = true;
-    btn.textContent = 'Starting...';
+    btn.textContent = t('docker.starting');
 
     try {
         const res = await authFetch(`${API_BASE}/docker/compose/up`, {
@@ -1804,21 +1804,21 @@ async function runCompose(name, btn) {
         });
         const data = await res.json();
 
-        if (!res.ok) throw new Error(data.error || 'Start failed');
+        if (!res.ok) throw new Error(data.error || t('common.error'));
 
-        alert(`Compose "${name}" started!`);
+        alert(t('docker.composeStarted').replace('{name}', name));
         renderContent('docker');
     } catch (e) {
         console.error('Compose run error:', e);
-        alert('Error: ' + e.message);
+        alert(t('common.error') + ': ' + e.message);
         btn.disabled = false;
-        btn.textContent = 'Run';
+        btn.textContent = t('docker.run');
     }
 }
 
 async function stopCompose(name, btn) {
     btn.disabled = true;
-    btn.textContent = 'Stopping...';
+    btn.textContent = t('docker.stopping');
 
     try {
         const res = await authFetch(`${API_BASE}/docker/compose/down`, {
@@ -1827,20 +1827,20 @@ async function stopCompose(name, btn) {
         });
         const data = await res.json();
 
-        if (!res.ok) throw new Error(data.error || 'Stop failed');
+        if (!res.ok) throw new Error(data.error || t('common.error'));
 
-        alert(`Compose "${name}" stopped!`);
+        alert(t('docker.composeStopped').replace('{name}', name));
         renderContent('docker');
     } catch (e) {
         console.error('Compose stop error:', e);
-        alert('Error: ' + e.message);
+        alert(t('common.error') + ': ' + e.message);
         btn.disabled = false;
-        btn.textContent = 'Stop';
+        btn.textContent = t('docker.stop');
     }
 }
 
 async function deleteCompose(name) {
-    if (!confirm(`Delete compose "${name}"?\n\nThis will stop all containers and remove the compose file.`)) {
+    if (!confirm(t('docker.deleteConfirm').replace('{name}', name))) {
         return;
     }
 
@@ -1850,13 +1850,13 @@ async function deleteCompose(name) {
         });
         const data = await res.json();
 
-        if (!res.ok) throw new Error(data.error || 'Delete failed');
+        if (!res.ok) throw new Error(data.error || t('common.error'));
 
-        alert(`Compose "${name}" deleted!`);
+        alert(t('docker.composeDeleted').replace('{name}', name));
         renderContent('docker');
     } catch (e) {
         console.error('Compose delete error:', e);
-        alert('Error: ' + e.message);
+        alert(t('common.error') + ': ' + e.message);
     }
 }
 
@@ -1950,7 +1950,7 @@ async function handleDockerAction(id, action, btn) {
     if (!btn) return;
 
     btn.disabled = true;
-    btn.textContent = 'Processing...';
+    btn.textContent = t('docker.processing');
 
     try {
         const res = await authFetch(`${API_BASE}/docker/action`, {
@@ -1960,15 +1960,15 @@ async function handleDockerAction(id, action, btn) {
 
         if (!res.ok) {
             const data = await res.json();
-            throw new Error(data.error || 'Docker action failed');
+            throw new Error(data.error || t('common.error'));
         }
 
         renderContent('docker');
     } catch (e) {
         console.error('Docker action error:', e);
-        alert(e.message || 'Docker Logic Fail');
+        alert(e.message || t('common.error'));
         btn.disabled = false;
-        btn.textContent = action === 'stop' ? 'Stop' : 'Start';
+        btn.textContent = action === 'stop' ? t('docker.stop') : t('docker.start');
     }
 }
 
@@ -1983,7 +1983,7 @@ async function renderNetworkManager() {
         state.network.interfaces = await res.json();
     } catch (e) {
         console.error('Network fetch error:', e);
-        dashboardContent.innerHTML = '<div class="glass-card"><h3>Error loading network data</h3></div>';
+        dashboardContent.innerHTML = `<div class="glass-card"><h3>${t('common.error')}</h3></div>`;
         return;
     }
 
@@ -1993,7 +1993,7 @@ async function renderNetworkManager() {
     // 1. Interfaces Section
     const ifaceSection = document.createElement('div');
     const ifaceTitle = document.createElement('h3');
-    ifaceTitle.textContent = 'CM5 Network Adapters';
+    ifaceTitle.textContent = t('network.adapters');
     ifaceTitle.style.marginBottom = '20px';
     ifaceSection.appendChild(ifaceTitle);
 
@@ -2034,7 +2034,7 @@ async function renderNetworkManager() {
 
         const dhcpLabel = document.createElement('label');
         dhcpLabel.htmlFor = `dhcp-${iface.id}`;
-        dhcpLabel.textContent = 'DHCP';
+        dhcpLabel.textContent = t('network.dhcp');
 
         checkboxItem.appendChild(dhcpCheckbox);
         checkboxItem.appendChild(dhcpLabel);
@@ -2059,7 +2059,7 @@ async function renderNetworkManager() {
             ipInput.placeholder = ' ';
 
             const label = document.createElement('label');
-            label.textContent = 'Hardware Assigned IP';
+            label.textContent = t('network.hardwareAssignedIP');
 
             inputGroup.appendChild(ipInput);
             inputGroup.appendChild(label);
@@ -2074,7 +2074,7 @@ async function renderNetworkManager() {
             ipInput.value = iface.ip || '';
             ipInput.placeholder = ' ';
             const ipLabel = document.createElement('label');
-            ipLabel.textContent = 'IP Address';
+            ipLabel.textContent = t('network.ipAddress');
             ipGroup.appendChild(ipInput);
             ipGroup.appendChild(ipLabel);
 
@@ -2087,7 +2087,7 @@ async function renderNetworkManager() {
             subnetInput.value = iface.subnet || '';
             subnetInput.placeholder = ' ';
             const subnetLabel = document.createElement('label');
-            subnetLabel.textContent = 'Subnet Mask';
+            subnetLabel.textContent = t('network.subnetMask');
             subnetGroup.appendChild(subnetInput);
             subnetGroup.appendChild(subnetLabel);
 
@@ -2102,7 +2102,7 @@ async function renderNetworkManager() {
         const saveBtn = document.createElement('button');
         saveBtn.className = 'btn-primary';
         saveBtn.style.cssText = 'padding: 10px; max-width: 200px;';
-        saveBtn.textContent = 'Save to Node';
+        saveBtn.textContent = t('network.saveToNode');
         saveBtn.addEventListener('click', () => applyNetwork(iface.id));
 
         btnContainer.appendChild(saveBtn);
@@ -2119,7 +2119,7 @@ async function renderNetworkManager() {
     const ddnsSection = document.createElement('div');
     const ddnsTitle = document.createElement('h3');
     ddnsTitle.style.cssText = 'margin-top: 40px; margin-bottom: 20px;';
-    ddnsTitle.textContent = 'Remote Access (DDNS)';
+    ddnsTitle.textContent = t('network.remoteAccess');
     ddnsSection.appendChild(ddnsTitle);
 
     const ddnsGrid = document.createElement('div');
@@ -2157,7 +2157,7 @@ async function renderNetworkManager() {
         const domainRow = document.createElement('div');
         domainRow.className = 'status-row-net';
         const domainLabel = document.createElement('span');
-        domainLabel.textContent = 'Domain';
+        domainLabel.textContent = t('network.domain');
         const domainValue = document.createElement('span');
         domainValue.style.color = 'white';
         domainValue.textContent = service.domain || 'N/A';
@@ -2168,7 +2168,7 @@ async function renderNetworkManager() {
         const ipRow = document.createElement('div');
         ipRow.className = 'status-row-net';
         const ipLabel = document.createElement('span');
-        ipLabel.textContent = 'Gateway IP';
+        ipLabel.textContent = t('network.gatewayIP');
         const ipValue = document.createElement('span');
         ipValue.style.cssText = 'color: #10b981; font-weight: 600;';
         ipValue.textContent = isOnline ? (state.publicIP || '---') : '---';
@@ -2191,7 +2191,7 @@ async function renderNetworkManager() {
     plusIcon.textContent = '+';
     const addText = document.createElement('span');
     addText.style.cssText = 'font-size: 0.9rem; font-weight: 600;';
-    addText.textContent = 'Add Service';
+    addText.textContent = t('network.addService');
 
     addCard.appendChild(plusIcon);
     addCard.appendChild(addText);
@@ -2231,7 +2231,7 @@ function renderNetForm(netForm, iface, isDhcp) {
         ipInput.placeholder = ' ';
 
         const label = document.createElement('label');
-        label.textContent = 'Hardware Assigned IP';
+        label.textContent = t('network.hardwareAssignedIP');
 
         inputGroup.appendChild(ipInput);
         inputGroup.appendChild(label);
@@ -2246,7 +2246,7 @@ function renderNetForm(netForm, iface, isDhcp) {
         ipInput.value = iface.ip || '';
         ipInput.placeholder = ' ';
         const ipLabel = document.createElement('label');
-        ipLabel.textContent = 'IP Address';
+        ipLabel.textContent = t('network.ipAddress');
         ipGroup.appendChild(ipInput);
         ipGroup.appendChild(ipLabel);
 
@@ -2259,7 +2259,7 @@ function renderNetForm(netForm, iface, isDhcp) {
         subnetInput.value = iface.subnet || '';
         subnetInput.placeholder = ' ';
         const subnetLabel = document.createElement('label');
-        subnetLabel.textContent = 'Subnet Mask';
+        subnetLabel.textContent = t('network.subnetMask');
         subnetGroup.appendChild(subnetInput);
         subnetGroup.appendChild(subnetLabel);
 
@@ -2272,7 +2272,7 @@ function renderNetForm(netForm, iface, isDhcp) {
         gatewayInput.value = iface.gateway || '';
         gatewayInput.placeholder = ' ';
         const gatewayLabel = document.createElement('label');
-        gatewayLabel.textContent = 'Gateway';
+        gatewayLabel.textContent = t('network.gateway');
         gatewayGroup.appendChild(gatewayInput);
         gatewayGroup.appendChild(gatewayLabel);
 
@@ -2285,7 +2285,7 @@ function renderNetForm(netForm, iface, isDhcp) {
         dnsInput.value = '';
         dnsInput.placeholder = ' ';
         const dnsLabel = document.createElement('label');
-        dnsLabel.textContent = 'DNS (ej: 8.8.8.8)';
+        dnsLabel.textContent = t('network.dnsExample');
         dnsGroup.appendChild(dnsInput);
         dnsGroup.appendChild(dnsLabel);
 
@@ -2302,7 +2302,7 @@ function renderNetForm(netForm, iface, isDhcp) {
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn-primary';
     saveBtn.style.cssText = 'padding: 10px; width: 100%;';
-    saveBtn.textContent = 'Save to Node';
+    saveBtn.textContent = t('network.saveToNode');
     saveBtn.addEventListener('click', () => applyNetwork(iface.id));
 
     btnContainer.appendChild(saveBtn);
@@ -2330,22 +2330,22 @@ async function applyNetwork(interfaceId) {
         const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
         if (config.ip && !ipRegex.test(config.ip)) {
-            alert('Formato de IP inválido');
+            alert(t('network.invalidIP'));
             return;
         }
 
         if (config.subnet && !ipRegex.test(config.subnet)) {
-            alert('Formato de máscara de subred inválido');
+            alert(t('network.invalidSubnet'));
             return;
         }
 
         if (config.gateway && !ipRegex.test(config.gateway)) {
-            alert('Formato de puerta de enlace inválido');
+            alert(t('network.invalidGateway'));
             return;
         }
 
         if (config.dns && !ipRegex.test(config.dns)) {
-            alert('Formato de DNS inválido');
+            alert(t('network.invalidDNS'));
             return;
         }
     }
@@ -2359,13 +2359,13 @@ async function applyNetwork(interfaceId) {
         const data = await res.json();
 
         if (!res.ok) {
-            throw new Error(data.error || 'Network configuration failed');
+            throw new Error(data.error || t('network.configFailed'));
         }
 
-        alert(data.message || 'Configuration saved');
+        alert(data.message || t('network.configSaved'));
     } catch (e) {
         console.error('Network config error:', e);
-        alert(e.message || 'Failed to apply network configuration');
+        alert(e.message || t('network.configFailed'));
     }
 }
 
@@ -2455,11 +2455,11 @@ function renderSystemView() {
     mgmtCard.style.gridColumn = '1 / -1';
 
     const mgmtTitle = document.createElement('h3');
-    mgmtTitle.textContent = 'CM5 Node Management';
+    mgmtTitle.textContent = t('system.nodeManagement');
 
     const mgmtDesc = document.createElement('p');
     mgmtDesc.style.cssText = 'color: var(--text-dim); margin-top: 10px;';
-    mgmtDesc.textContent = 'Execute physical actions on the NAS hardware.';
+    mgmtDesc.textContent = t('system.executeActions');
 
     const btnContainer = document.createElement('div');
     btnContainer.style.cssText = 'display: flex; gap: 20px; margin-top: 30px;';
@@ -2467,13 +2467,13 @@ function renderSystemView() {
     const rebootBtn = document.createElement('button');
     rebootBtn.className = 'btn-primary';
     rebootBtn.style.cssText = 'background: #f59e0b; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);';
-    rebootBtn.textContent = 'Restart Node';
+    rebootBtn.textContent = t('system.restartNode');
     rebootBtn.addEventListener('click', () => systemAction('reboot'));
 
     const shutdownBtn = document.createElement('button');
     shutdownBtn.className = 'btn-primary';
     shutdownBtn.style.cssText = 'background: #ef4444; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);';
-    shutdownBtn.textContent = 'Power Off';
+    shutdownBtn.textContent = t('system.powerOff');
     shutdownBtn.addEventListener('click', () => systemAction('shutdown'));
 
     btnContainer.appendChild(rebootBtn);
@@ -2488,15 +2488,15 @@ function renderSystemView() {
     infoCard.className = 'glass-card';
 
     const infoTitle = document.createElement('h3');
-    infoTitle.textContent = 'System Info';
+    infoTitle.textContent = t('system.systemInfo');
 
     const uptimeRow = document.createElement('div');
     uptimeRow.className = 'stat-row';
-    uptimeRow.innerHTML = `<span>Logic Uptime</span> <span>${uptimeStr}</span>`;
+    uptimeRow.innerHTML = `<span>${t('system.logicUptime')}</span> <span>${uptimeStr}</span>`;
 
     const hostnameRow = document.createElement('div');
     hostnameRow.className = 'stat-row';
-    hostnameRow.innerHTML = `<span>Node Name</span> <span>${hostname}</span>`;
+    hostnameRow.innerHTML = `<span>${t('system.nodeName')}</span> <span>${hostname}</span>`;
 
     infoCard.appendChild(infoTitle);
     infoCard.appendChild(uptimeRow);
@@ -2507,16 +2507,16 @@ function renderSystemView() {
     updateCard.className = 'glass-card';
 
     const updateTitle = document.createElement('h3');
-    updateTitle.textContent = 'Software Updates';
+    updateTitle.textContent = t('system.softwareUpdates');
 
     const updateDesc = document.createElement('p');
     updateDesc.style.cssText = 'color: var(--text-dim); margin-top: 10px;';
-    updateDesc.textContent = 'Check for and install HomePiNAS updates from GitHub.';
+    updateDesc.textContent = t('system.checkUpdatesDesc');
 
     const updateStatus = document.createElement('div');
     updateStatus.id = 'update-status';
     updateStatus.style.cssText = 'margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;';
-    updateStatus.innerHTML = '<span style="color: var(--text-dim);">Click "Check Updates" to verify...</span>';
+    updateStatus.innerHTML = `<span style="color: var(--text-dim);">${t('system.clickToCheck')}</span>`;
 
     const updateBtnContainer = document.createElement('div');
     updateBtnContainer.style.cssText = 'display: flex; gap: 15px; margin-top: 20px;';
@@ -2524,14 +2524,14 @@ function renderSystemView() {
     const checkUpdateBtn = document.createElement('button');
     checkUpdateBtn.className = 'btn-primary';
     checkUpdateBtn.style.cssText = 'background: #6366f1; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);';
-    checkUpdateBtn.textContent = 'Check Updates';
+    checkUpdateBtn.textContent = t('system.checkUpdates');
     checkUpdateBtn.addEventListener('click', checkForUpdates);
 
     const applyUpdateBtn = document.createElement('button');
     applyUpdateBtn.className = 'btn-primary';
     applyUpdateBtn.id = 'apply-update-btn';
     applyUpdateBtn.style.cssText = 'background: #10b981; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); display: none;';
-    applyUpdateBtn.textContent = 'Install Update';
+    applyUpdateBtn.textContent = t('system.installUpdate');
     applyUpdateBtn.addEventListener('click', applyUpdate);
 
     updateBtnContainer.appendChild(checkUpdateBtn);
@@ -2548,22 +2548,22 @@ function renderSystemView() {
 }
 
 async function systemAction(action) {
-    const actionLabel = action === 'reboot' ? 'restart' : 'shut down';
+    const confirmMsg = action === 'reboot' ? t('system.confirmRestart') : t('system.confirmShutdown');
 
-    if (!confirm(`Are you sure you want to ${actionLabel} the NAS?`)) return;
+    if (!confirm(confirmMsg)) return;
 
     try {
         const res = await authFetch(`${API_BASE}/system/${action}`, { method: 'POST' });
 
         if (!res.ok) {
             const data = await res.json();
-            throw new Error(data.error || 'System action failed');
+            throw new Error(data.error || t('system.systemActionFailed'));
         }
 
-        alert(`${action.toUpperCase()} command sent to Hardware.`);
+        alert(t('system.commandSent').replace('{action}', action.toUpperCase()));
     } catch (e) {
         console.error('System action error:', e);
-        alert(e.message || 'System Logic Fail');
+        alert(e.message || t('system.systemActionFailed'));
     }
 }
 
@@ -2576,7 +2576,7 @@ async function checkForUpdates() {
 
     if (!statusEl) return;
 
-    statusEl.innerHTML = '<span style="color: #f59e0b;">Checking for updates...</span>';
+    statusEl.innerHTML = `<span style="color: #f59e0b;">${t('system.checkingUpdates')}</span>`;
     if (applyBtn) applyBtn.style.display = 'none';
 
     try {
@@ -2584,38 +2584,38 @@ async function checkForUpdates() {
         const data = await res.json();
 
         if (!res.ok) {
-            throw new Error(data.error || 'Failed to check updates');
+            throw new Error(data.error || t('common.error'));
         }
 
         if (data.updateAvailable) {
             statusEl.innerHTML = `
-                <div style="color: #10b981; font-weight: 600;">Update Available!</div>
+                <div style="color: #10b981; font-weight: 600;">${t('system.updateAvailable')}</div>
                 <div style="margin-top: 8px; color: var(--text-dim);">
-                    Current: <strong>v${escapeHtml(data.currentVersion)}</strong> →
-                    Latest: <strong style="color: #10b981;">v${escapeHtml(data.latestVersion)}</strong>
+                    ${t('system.current')}: <strong>v${escapeHtml(data.currentVersion)}</strong> →
+                    ${t('system.latest')}: <strong style="color: #10b981;">v${escapeHtml(data.latestVersion)}</strong>
                 </div>
                 <div style="margin-top: 10px; font-size: 0.85rem; color: var(--text-dim);">
-                    <strong>Changes:</strong><br>
-                    <code style="display: block; margin-top: 5px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; white-space: pre-wrap;">${escapeHtml(data.changelog || 'See GitHub for details')}</code>
+                    <strong>${t('system.changes')}:</strong><br>
+                    <code style="display: block; margin-top: 5px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; white-space: pre-wrap;">${escapeHtml(data.changelog || t('system.seeGitHub'))}</code>
                 </div>
             `;
             if (applyBtn) applyBtn.style.display = 'inline-block';
         } else {
             statusEl.innerHTML = `
-                <div style="color: #6366f1;">You're up to date!</div>
+                <div style="color: #6366f1;">${t('system.upToDate')}</div>
                 <div style="margin-top: 8px; color: var(--text-dim);">
-                    Version: <strong>v${escapeHtml(data.currentVersion)}</strong>
+                    ${t('system.version')}: <strong>v${escapeHtml(data.currentVersion)}</strong>
                 </div>
             `;
         }
     } catch (e) {
         console.error('Update check error:', e);
-        statusEl.innerHTML = `<span style="color: #ef4444;">Error: ${escapeHtml(e.message)}</span>`;
+        statusEl.innerHTML = `<span style="color: #ef4444;">${t('common.error')}: ${escapeHtml(e.message)}</span>`;
     }
 }
 
 async function applyUpdate() {
-    if (!confirm('Install the update now? The service will restart and you may lose connection for ~30 seconds.')) {
+    if (!confirm(t('system.installConfirm'))) {
         return;
     }
 
@@ -2623,11 +2623,11 @@ async function applyUpdate() {
     const applyBtn = document.getElementById('apply-update-btn');
 
     if (statusEl) {
-        statusEl.innerHTML = '<span style="color: #f59e0b;">Installing update... Please wait.</span>';
+        statusEl.innerHTML = `<span style="color: #f59e0b;">${t('system.installing')}</span>`;
     }
     if (applyBtn) {
         applyBtn.disabled = true;
-        applyBtn.textContent = 'Installing...';
+        applyBtn.textContent = t('system.installing');
     }
 
     try {
@@ -2635,14 +2635,14 @@ async function applyUpdate() {
         const data = await res.json();
 
         if (!res.ok) {
-            throw new Error(data.error || 'Update failed');
+            throw new Error(data.error || t('system.updateFailed'));
         }
 
         if (statusEl) {
             statusEl.innerHTML = `
-                <div style="color: #10b981; font-weight: 600;">Update started!</div>
+                <div style="color: #10b981; font-weight: 600;">${t('system.updateStarted')}</div>
                 <div style="margin-top: 8px; color: var(--text-dim);">
-                    The service is restarting. This page will refresh automatically in 30 seconds...
+                    ${t('system.serviceRestarting')}
                 </div>
                 <div style="margin-top: 10px;">
                     <div class="progress-bar" style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
@@ -2667,11 +2667,11 @@ async function applyUpdate() {
     } catch (e) {
         console.error('Update apply error:', e);
         if (statusEl) {
-            statusEl.innerHTML = `<span style="color: #ef4444;">Update failed: ${escapeHtml(e.message)}</span>`;
+            statusEl.innerHTML = `<span style="color: #ef4444;">${t('system.updateFailed')}: ${escapeHtml(e.message)}</span>`;
         }
         if (applyBtn) {
             applyBtn.disabled = false;
-            applyBtn.textContent = 'Retry Update';
+            applyBtn.textContent = t('system.retryUpdate');
             applyBtn.style.display = 'inline-block';
         }
     }
@@ -2693,9 +2693,9 @@ function getRoleColor(role) {
 
 if (resetBtn) {
     resetBtn.addEventListener('click', async () => {
-        if (!confirm('Are you sure you want to RESET the entire NAS? This will delete all configuration and require a new setup.')) return;
+        if (!confirm(t('system.confirmReset'))) return;
 
-        resetBtn.textContent = 'Resetting Node...';
+        resetBtn.textContent = t('system.resettingNode');
         resetBtn.disabled = true;
 
         try {
@@ -2707,14 +2707,14 @@ if (resetBtn) {
                 clearSession();
                 window.location.reload();
             } else {
-                alert('Reset Failed: ' + (data.error || 'Unknown error'));
-                resetBtn.textContent = 'Reset Setup & Data';
+                alert(t('system.resetFailed') + ': ' + (data.error || t('common.error')));
+                resetBtn.textContent = t('auth.resetSetupData');
                 resetBtn.disabled = false;
             }
         } catch (e) {
             console.error('Reset error:', e);
-            alert(e.message || 'Reset Error: Communications Broken');
-            resetBtn.textContent = 'Reset Setup & Data';
+            alert(e.message || t('system.resetError'));
+            resetBtn.textContent = t('auth.resetSetupData');
             resetBtn.disabled = false;
         }
     });
@@ -2903,7 +2903,7 @@ function openTerminal(command = 'bash', title = 'Terminal') {
         });
 
     } else {
-        containerEl.innerHTML = '<p style="color: #ef4444; padding: 20px;">Error: xterm.js no disponible</p>';
+        containerEl.innerHTML = `<p style="color: #ef4444; padding: 20px;">${t('common.error')}: xterm.js</p>`;
     }
 }
 
