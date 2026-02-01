@@ -419,6 +419,8 @@
                 html.setAttribute('lang', next);
                 localStorage.setItem('homepinas-lang', next);
                 window.dispatchEvent(new CustomEvent('langchange', { detail: { lang: next } }));
+                // Reload to apply translations
+                setTimeout(() => location.reload(), 100);
             });
 
             // Mobile menu toggle
