@@ -1,0 +1,606 @@
+/* ============================================================================
+   HomePiNAS v2.2.0 - RESPONSIVE MOBILE STYLES
+   ============================================================================ */
+
+/* ========== MOBILE NAVIGATION (Hamburger Menu) ========== */
+
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 1100;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    cursor: pointer;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    box-shadow: 0 2px 8px var(--card-shadow);
+    transition: all 0.3s ease;
+}
+
+.mobile-menu-toggle span {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: var(--text-primary);
+    border-radius: 1px;
+    transition: all 0.3s ease;
+}
+
+.mobile-menu-toggle.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+}
+
+.mobile-menu-toggle.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.mobile-menu-toggle.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px);
+}
+
+/* Sidebar Overlay for Mobile */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.active {
+    display: block;
+    opacity: 1;
+}
+
+/* ========== TABLET BREAKPOINT (max-width: 1024px) ========== */
+@media (max-width: 1024px) {
+    .dashboard-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .storage-mount-row {
+        grid-template-columns: 150px 1fr 120px 80px;
+    }
+    
+    .telemetry-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .content {
+        padding: 30px;
+    }
+}
+
+/* ========== MOBILE BREAKPOINT (max-width: 768px) ========== */
+@media (max-width: 768px) {
+    /* Show hamburger menu */
+    .mobile-menu-toggle {
+        display: flex;
+    }
+    
+    /* Sidebar transforms to slide-out drawer */
+    .sidebar {
+        position: fixed;
+        left: -280px;
+        top: 0;
+        height: 100vh;
+        z-index: 1000;
+        transition: left 0.3s ease;
+        box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    .sidebar.open {
+        left: 0;
+    }
+    
+    /* Dashboard view adjustments */
+    #dashboard-view {
+        flex-direction: column;
+    }
+    
+    .content {
+        padding: 70px 15px 20px 15px;
+        width: 100%;
+    }
+    
+    header {
+        margin-bottom: 20px;
+    }
+    
+    header h2 {
+        font-size: 1.3rem;
+    }
+    
+    /* Grid layouts for mobile */
+    .dashboard-grid-4 {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .grid-container {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .telemetry-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .interfaces-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .ddns-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .terminal-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Storage mount rows stack on mobile */
+    .storage-mount-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 15px;
+    }
+    
+    .mount-info {
+        border-bottom: 1px solid var(--card-border);
+        padding-bottom: 10px;
+    }
+    
+    .mount-size, .mount-type {
+        text-align: left;
+    }
+    
+    /* Cards */
+    .glass-card {
+        padding: 18px;
+        border-radius: 10px;
+    }
+    
+    .card-compact {
+        padding: 15px;
+    }
+    
+    /* Settings controls */
+    .settings-controls {
+        top: 15px;
+        right: 70px;
+        gap: 6px;
+    }
+    
+    .settings-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 1.1rem;
+    }
+    
+    /* Login/Setup cards */
+    .login-card {
+        max-width: 100%;
+        margin: 15px;
+        padding: 25px 20px;
+    }
+    
+    .brand h1 {
+        font-size: 2rem;
+    }
+    
+    /* Storage setup */
+    #storage-view {
+        padding: 20px 15px;
+    }
+    
+    .storage-card {
+        padding: 20px;
+    }
+    
+    .storage-info-banner {
+        flex-direction: column;
+    }
+    
+    .disk-table {
+        display: block;
+        overflow-x: auto;
+    }
+    
+    .disk-table th,
+    .disk-table td {
+        padding: 12px 8px;
+        font-size: 0.85rem;
+    }
+    
+    .role-selector {
+        flex-wrap: wrap;
+    }
+    
+    .role-btn {
+        padding: 8px 10px;
+        font-size: 0.75rem;
+    }
+    
+    /* Modal adjustments */
+    .modal-content {
+        width: 95%;
+        max-width: none;
+        margin: 10px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .terminal-modal-content {
+        width: 100%;
+        height: 100vh;
+        max-width: none;
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .logs-modal-content {
+        width: 100%;
+        height: 90vh;
+    }
+    
+    /* Docker cards */
+    .docker-controls {
+        flex-wrap: wrap;
+    }
+    
+    .docker-actions-row {
+        flex-direction: column;
+    }
+    
+    .docker-action-btn {
+        width: 100%;
+    }
+    
+    /* Overview header */
+    .overview-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .system-info-badge {
+        flex-wrap: wrap;
+        font-size: 0.8rem;
+    }
+    
+    /* Memory compact */
+    .memory-compact {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .memory-details-compact {
+        width: 100%;
+    }
+    
+    /* Fan mode selector */
+    .fan-mode-selector {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .fan-mode-btn {
+        flex: 1 1 30%;
+        min-width: 80px;
+    }
+    
+    /* Network form */
+    .net-form {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Terms modal */
+    .terms-content {
+        max-height: 85vh;
+    }
+    
+    .terms-body {
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+    
+    /* Disk progress */
+    .storage-progress {
+        width: 95%;
+    }
+    
+    .progress-step {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .progress-step .step-icon {
+        align-self: flex-start;
+    }
+}
+
+/* ========== SMALL MOBILE (max-width: 480px) ========== */
+@media (max-width: 480px) {
+    .content {
+        padding: 65px 10px 15px 10px;
+    }
+    
+    .glass-card {
+        padding: 15px;
+    }
+    
+    .brand h1 {
+        font-size: 1.6rem;
+    }
+    
+    .brand p {
+        font-size: 0.9rem;
+    }
+    
+    .btn-primary {
+        padding: 12px;
+        font-size: 0.95rem;
+    }
+    
+    .input-group input {
+        font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+    
+    /* Cards compact */
+    .card-compact h3 {
+        font-size: 0.85rem;
+    }
+    
+    .cpu-model-compact {
+        font-size: 0.8rem;
+    }
+    
+    .cpu-specs-row span {
+        font-size: 0.7rem;
+        padding: 3px 8px;
+    }
+    
+    /* Fan controls */
+    .fan-mode-btn {
+        flex: 1 1 100%;
+        padding: 8px;
+    }
+    
+    .fan-mode-btn .mode-name {
+        font-size: 0.65rem;
+    }
+    
+    /* Disk management */
+    .disk-management-area {
+        margin: 0 -15px;
+    }
+    
+    .disk-table {
+        font-size: 0.8rem;
+    }
+    
+    /* User info in sidebar */
+    .user-info {
+        padding: 12px 20px;
+    }
+    
+    #username-display {
+        font-size: 0.85rem;
+    }
+    
+    /* Navigation links */
+    .nav-links li {
+        padding: 14px 25px;
+        font-size: 0.95rem;
+    }
+    
+    /* Storage stats */
+    .storage-total-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .storage-total-stat {
+        align-items: flex-start;
+    }
+}
+
+/* ========== TOUCH TARGETS (Improved for Mobile) ========== */
+@media (pointer: coarse) {
+    /* Larger touch targets for buttons */
+    .btn-sm {
+        padding: 10px 16px;
+        min-height: 44px;
+    }
+    
+    .btn-primary {
+        padding: 16px;
+        min-height: 48px;
+    }
+    
+    .btn-close {
+        width: 44px;
+        height: 44px;
+        font-size: 1.8rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .role-btn {
+        padding: 12px 16px;
+        min-height: 44px;
+    }
+    
+    /* Nav links */
+    .nav-links li {
+        padding: 16px 30px;
+        min-height: 50px;
+    }
+    
+    /* Toggle switches */
+    .switch {
+        width: 50px;
+        height: 28px;
+    }
+    
+    .slider:before {
+        height: 22px;
+        width: 22px;
+    }
+    
+    input:checked + .slider:before {
+        transform: translateX(22px);
+    }
+    
+    /* Fan slider */
+    .fan-slider::-webkit-slider-thumb {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .fan-slider::-moz-range-thumb {
+        width: 24px;
+        height: 24px;
+    }
+    
+    /* Checkbox */
+    .checkbox-group input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+    }
+    
+    /* Docker controls */
+    .docker-action-btn {
+        padding: 12px 16px;
+        min-height: 44px;
+    }
+    
+    /* Settings buttons */
+    .settings-btn {
+        width: 48px;
+        height: 48px;
+    }
+    
+    /* Shortcut cards */
+    .shortcut-card {
+        padding: 24px;
+        min-height: 160px;
+    }
+}
+
+/* ========== LANDSCAPE MOBILE ========== */
+@media (max-height: 500px) and (orientation: landscape) {
+    .login-card {
+        padding: 20px;
+    }
+    
+    .brand {
+        margin-bottom: 15px;
+    }
+    
+    .brand h1 {
+        font-size: 1.5rem;
+        margin-bottom: 5px;
+    }
+    
+    .brand p {
+        margin-bottom: 20px;
+    }
+    
+    .input-group {
+        margin-bottom: 18px;
+    }
+    
+    /* Terminal in landscape */
+    .terminal-modal-content {
+        height: 100vh;
+    }
+}
+
+/* ========== PWA STANDALONE MODE ========== */
+@media (display-mode: standalone) {
+    /* Remove browser-specific UI elements */
+    body {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    
+    /* Safe area for notched devices */
+    .sidebar {
+        padding-top: max(30px, env(safe-area-inset-top));
+    }
+    
+    .content {
+        padding-top: max(70px, calc(env(safe-area-inset-top) + 50px));
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    
+    .settings-controls {
+        top: max(15px, env(safe-area-inset-top));
+    }
+    
+    .mobile-menu-toggle {
+        top: max(15px, env(safe-area-inset-top));
+    }
+    
+    /* Login view safe area */
+    #login-view,
+    #setup-view,
+    #storage-view {
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+}
+
+/* ========== PRINT STYLES ========== */
+@media print {
+    .sidebar,
+    .mobile-menu-toggle,
+    .settings-controls,
+    .modal {
+        display: none !important;
+    }
+    
+    .content {
+        padding: 0;
+        width: 100%;
+    }
+    
+    .glass-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ccc;
+    }
+}
+
+/* ========== REDUCED MOTION ========== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .sidebar {
+        transition: none;
+    }
+    
+    .mobile-menu-toggle span {
+        transition: none;
+    }
+}

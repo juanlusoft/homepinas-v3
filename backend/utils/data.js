@@ -26,12 +26,12 @@ const initialState = {
 };
 
 /**
- * Ensure config directory exists
+ * Ensure config directory exists with secure permissions
  */
 function ensureConfigDir() {
     const configDir = path.dirname(DATA_FILE);
     if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true });
+        fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
     }
 }
 
@@ -54,12 +54,12 @@ function getData() {
 }
 
 /**
- * Save data to JSON file
+ * Save data to JSON file with secure permissions
  */
 function saveData(data) {
     try {
         ensureConfigDir();
-        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
     } catch (e) {
         console.error('Error saving data file:', e.message);
         throw new Error('Failed to save configuration');

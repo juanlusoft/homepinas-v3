@@ -1,3 +1,6 @@
+// Import i18n
+import { initI18n, t, applyTranslations, getCurrentLang } from './i18n.js';
+
 // State Management
 const state = {
     isAuthenticated: false,
@@ -14,6 +17,8 @@ const state = {
         ddns: []
     },
     dockers: [],
+    shortcuts: { defaults: [], custom: [] },
+    terminalSession: null,
     pollingIntervals: { stats: null, publicIP: null }
 };
 
@@ -89,10 +94,11 @@ const views = {
 };
 
 const viewsMap = {
-    'dashboard': 'Overview',
-    'docker': 'Docker Manager',
-    'storage': 'Storage Health',
-    'network': 'Network Management',
+    'dashboard': 'Resumen del Sistema',
+    'docker': 'Gestor de Docker',
+    'storage': 'Almacenamiento',
+    'terminal': 'Terminal y Herramientas',
+    'network': 'Gestión de Red',
     'system': 'System Administration'
 };
 
@@ -165,10 +171,9 @@ async function initAuth() {
         // Try to load existing session
         loadSession();
 
-        const [statusRes, disksRes, backendRes] = await Promise.all([
+        const [statusRes, disksRes] = await Promise.all([
             fetch(`${API_BASE}/system/status`),
-            fetch(`${API_BASE}/system/disks`),
-            fetch(`${API_BASE}/storage/backend`)
+            fetch(`${API_BASE}/system/disks`)
         ]);
 
         if (!statusRes.ok || !disksRes.ok) {
@@ -177,12 +182,6 @@ async function initAuth() {
 
         const status = await statusRes.json();
         state.disks = await disksRes.json();
-        
-        // Get storage backend type
-        if (backendRes.ok) {
-            const backendData = await backendRes.json();
-            state.storageBackend = backendData.backend || 'snapraid';
-        }
 
         state.user = status.user;
         state.storageConfig = status.storageConfig;
@@ -412,26 +411,6 @@ function showProgressModal() {
                 if (icon) icon.textContent = '⏳';
             }
         });
-        
-        // Update step labels based on backend type
-        if (state.storageBackend === 'nonraid') {
-            const snapraidStep = progressSteps.snapraid;
-            const mergerfsStep = progressSteps.mergerfs;
-            const syncStep = progressSteps.sync;
-            
-            if (snapraidStep) {
-                const text = snapraidStep.querySelector('.step-text');
-                if (text) text.textContent = 'Creating NonRAID config...';
-            }
-            if (mergerfsStep) {
-                const text = mergerfsStep.querySelector('.step-text');
-                if (text) text.textContent = 'Configuring parity protection...';
-            }
-            if (syncStep) {
-                const text = syncStep.querySelector('.step-text');
-                if (text) text.textContent = 'Starting NonRAID service...';
-            }
-        }
     }
 }
 
@@ -587,24 +566,10 @@ if (saveStorageBtn) {
             updateProgressStep('format', 'active');
             await new Promise(r => setTimeout(r, 500));
 
-            // Determine the correct endpoint and payload based on backend
-            let configEndpoint, requestBody;
-            
-            if (state.storageBackend === 'nonraid') {
-                configEndpoint = `${API_BASE}/storage/array/configure`;
-                // NonRAID expects dataDisks and parityDisk arrays
-                const dataDisks = selections.filter(s => s.role === 'data').map(s => s.id);
-                const parityDisk = selections.filter(s => s.role === 'parity').map(s => s.id);
-                requestBody = { dataDisks, parityDisk: parityDisk[0], shareMode: 'individual' };
-            } else {
-                configEndpoint = `${API_BASE}/storage/pool/configure`;
-                requestBody = { disks: selections };
-            }
-
             // Call configure endpoint
-            const res = await authFetch(configEndpoint, {
+            const res = await authFetch(`${API_BASE}/storage/pool/configure`, {
                 method: 'POST',
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify({ disks: selections })
             });
 
             const data = await res.json();
@@ -633,34 +598,26 @@ if (saveStorageBtn) {
             await new Promise(r => setTimeout(r, 500));
             updateProgressStep('fstab', 'completed');
 
-            // Step 6: Sync/Start service
+            // Step 6: SnapRAID initial sync
             updateProgressStep('sync', 'active');
-            
-            if (state.storageBackend === 'nonraid') {
-                // NonRAID: Just start the service, no sync needed
-                updateSyncProgress(0, 'Starting NonRAID service...');
-                await new Promise(r => setTimeout(r, 1000));
-                updateSyncProgress(100, 'NonRAID service started');
-                updateProgressStep('sync', 'completed');
-            } else {
-                // SnapRAID: Start sync in background
-                updateSyncProgress(0, 'Starting initial sync...');
-                try {
-                    await authFetch(`${API_BASE}/storage/snapraid/sync`, { method: 'POST' });
-                    // Poll for progress
-                    const syncResult = await pollSyncProgress();
+            updateSyncProgress(0, 'Starting initial sync...');
 
-                    if (!syncResult.success) {
-                        console.warn('Sync warning:', syncResult.error);
-                        // Don't fail the whole process, sync can be run later
-                        updateProgressStep('sync', 'completed');
-                        updateSyncProgress(100, 'Sync will complete in background');
-                    }
-                } catch (syncError) {
-                    console.warn('Sync skipped:', syncError);
+            // Start sync in background
+            try {
+                await authFetch(`${API_BASE}/storage/snapraid/sync`, { method: 'POST' });
+                // Poll for progress
+                const syncResult = await pollSyncProgress();
+
+                if (!syncResult.success) {
+                    console.warn('Sync warning:', syncResult.error);
+                    // Don't fail the whole process, sync can be run later
                     updateProgressStep('sync', 'completed');
-                    updateSyncProgress(100, 'Sync scheduled for later');
+                    updateSyncProgress(100, 'Sync will complete in background');
                 }
+            } catch (syncError) {
+                console.warn('Sync skipped:', syncError);
+                updateProgressStep('sync', 'completed');
+                updateSyncProgress(100, 'Sync scheduled for later');
             }
 
             state.storageConfig = selections;
@@ -668,11 +625,8 @@ if (saveStorageBtn) {
             // Update progress message
             const progressMsg = document.getElementById('progress-message');
             if (progressMsg) {
-                if (state.storageBackend === 'nonraid') {
-                    progressMsg.innerHTML = `✅ <strong>NonRAID Array Created!</strong><br>Disks mounted at /mnt/disk[N]`;
-                } else {
-                    progressMsg.innerHTML = `✅ <strong>Storage Pool Created!</strong><br>Pool mounted at: ${escapeHtml(data.poolMount || '/mnt/storage')}`;
-                }
+                // SECURITY: Escape poolMount to prevent XSS
+                progressMsg.innerHTML = `✅ <strong>Storage Pool Created!</strong><br>Pool mounted at: ${escapeHtml(data.poolMount)}`;
             }
 
             // Show continue button
@@ -784,6 +738,7 @@ function renderContent(view) {
     if (view === 'dashboard') renderDashboard();
     else if (view === 'docker') renderDockerManager();
     else if (view === 'storage') renderStorageDashboard();
+    else if (view === 'terminal') renderTerminalView();
     else if (view === 'network') renderNetworkManager();
     else if (view === 'system') renderSystemView();
 }
@@ -1088,13 +1043,126 @@ window.setFanMode = setFanMode;
 // Real Storage Telemetry
 async function renderStorageDashboard() {
     try {
-        // Re-fetch disks to ensure real-time connection
-        const res = await fetch(`${API_BASE}/system/disks`);
-        if (!res.ok) throw new Error('Failed to fetch disks');
-        state.disks = await res.json();
+        // Fetch disks and pool status
+        const [disksRes, poolRes] = await Promise.all([
+            fetch(`${API_BASE}/system/disks`),
+            fetch(`${API_BASE}/storage/pool/status`)
+        ]);
+        
+        if (disksRes.ok) state.disks = await disksRes.json();
+        let poolStatus = {};
+        if (poolRes.ok) poolStatus = await poolRes.json();
 
+        // Storage Array Header (Cockpit style)
+        const arrayCard = document.createElement('div');
+        arrayCard.className = 'glass-card storage-array-view';
+        arrayCard.style.gridColumn = '1 / -1';
+
+        const arrayHeader = document.createElement('div');
+        arrayHeader.className = 'storage-array-header';
+        arrayHeader.innerHTML = `
+            <h3>💾 ${t('storage.storageArray', 'Array de Almacenamiento')}</h3>
+            <div class="storage-total-stats">
+                <div class="storage-total-stat">
+                    <span class="label">${t('storage.total', 'Total')}</span>
+                    <span class="value">${escapeHtml(poolStatus.poolSize || 'N/A')}</span>
+                </div>
+                <div class="storage-total-stat">
+                    <span class="label">${t('storage.used', 'Usado')}</span>
+                    <span class="value">${escapeHtml(poolStatus.poolUsed || 'N/A')}</span>
+                </div>
+                <div class="storage-total-stat">
+                    <span class="label">${t('storage.available', 'Disponible')}</span>
+                    <span class="value" style="color: #10b981;">${escapeHtml(poolStatus.poolFree || 'N/A')}</span>
+                </div>
+            </div>
+        `;
+        arrayCard.appendChild(arrayHeader);
+
+        // Mount points grid
+        const mountsGrid = document.createElement('div');
+        mountsGrid.className = 'storage-array-grid';
+
+        // Pool mount (if configured)
+        if (poolStatus.configured && poolStatus.running) {
+            const poolUsedNum = parseFloat(poolStatus.poolUsed) || 0;
+            const poolSizeNum = parseFloat(poolStatus.poolSize) || 1;
+            const poolPercent = Math.round((poolUsedNum / poolSizeNum) * 100);
+            const poolFillClass = poolPercent > 90 ? 'high' : poolPercent > 70 ? 'medium' : 'low';
+
+            const poolRow = document.createElement('div');
+            poolRow.className = 'storage-mount-row pool';
+            poolRow.innerHTML = `
+                <div class="mount-info">
+                    <span class="mount-path">${escapeHtml(poolStatus.poolMount || '/mnt/storage')}</span>
+                    <span class="mount-device">MergerFS Pool</span>
+                </div>
+                <div class="mount-bar-container">
+                    <div class="mount-bar">
+                        <div class="mount-bar-fill ${poolFillClass}" style="width: ${poolPercent}%"></div>
+                    </div>
+                    <div class="mount-bar-text">
+                        <span>${poolPercent}% ${t('storage.used', 'usado')}</span>
+                        <span>${escapeHtml(poolStatus.poolFree || 'N/A')} ${t('storage.available', 'disponible')}</span>
+                    </div>
+                </div>
+                <div class="mount-size">
+                    <span class="available">${escapeHtml(poolStatus.poolFree || 'N/A')}</span>
+                    <span class="total">de ${escapeHtml(poolStatus.poolSize || 'N/A')}</span>
+                </div>
+                <div class="mount-type">
+                    <span class="mount-type-badge mergerfs">MergerFS</span>
+                </div>
+            `;
+            mountsGrid.appendChild(poolRow);
+        }
+
+        // Individual disk mounts
+        state.disks.forEach((disk, index) => {
+            const config = state.storageConfig.find(s => s.id === disk.id);
+            const role = config ? config.role : 'none';
+            if (role === 'none') return;
+
+            const usage = Math.min(Math.max(Number(disk.usage) || 0, 0), 100);
+            const fillClass = usage > 90 ? 'high' : usage > 70 ? 'medium' : 'low';
+            const mountPoint = role === 'data' ? `/mnt/disks/disk${index + 1}` : 
+                              role === 'parity' ? `/mnt/parity${index + 1}` :
+                              `/mnt/disks/cache${index + 1}`;
+
+            const diskRow = document.createElement('div');
+            diskRow.className = `storage-mount-row ${role}`;
+            diskRow.innerHTML = `
+                <div class="mount-info">
+                    <span class="mount-path">${escapeHtml(mountPoint)}</span>
+                    <span class="mount-device">/dev/${escapeHtml(disk.id)} • ${escapeHtml(disk.model || 'Unknown')}</span>
+                </div>
+                <div class="mount-bar-container">
+                    <div class="mount-bar">
+                        <div class="mount-bar-fill ${fillClass}" style="width: ${usage}%"></div>
+                    </div>
+                    <div class="mount-bar-text">
+                        <span>${usage}% ${t('storage.used', 'usado')}</span>
+                        <span>${escapeHtml(disk.size || 'N/A')}</span>
+                    </div>
+                </div>
+                <div class="mount-size">
+                    <span class="available">${escapeHtml(disk.size || 'N/A')}</span>
+                    <span class="total">${role.toUpperCase()}</span>
+                </div>
+                <div class="mount-type">
+                    <span class="mount-type-badge ext4">ext4</span>
+                </div>
+            `;
+            mountsGrid.appendChild(diskRow);
+        });
+
+        arrayCard.appendChild(mountsGrid);
+        dashboardContent.appendChild(arrayCard);
+
+        // Disk cards grid (detailed view)
         const grid = document.createElement('div');
         grid.className = 'telemetry-grid';
+        grid.style.marginTop = '20px';
 
         state.disks.forEach(disk => {
             const config = state.storageConfig.find(s => s.id === disk.id);
@@ -1134,7 +1202,7 @@ async function renderStorageDashboard() {
             const progressContainer = document.createElement('div');
             progressContainer.className = 'disk-progress-container';
             progressContainer.innerHTML = `
-                <div class="telemetry-stats-row"><span>Health Status</span><span style="color:#10b981">Optimal</span></div>
+                <div class="telemetry-stats-row"><span>${t('storage.healthStatus', 'Estado de Salud')}</span><span style="color:#10b981">${t('storage.optimal', 'Óptimo')}</span></div>
                 <div class="disk-usage-bar"><div class="disk-usage-fill" style="width: ${usage}%; background: ${getRoleColor(role)}"></div></div>
             `;
 
@@ -1307,6 +1375,23 @@ async function renderDockerManager() {
                 card.appendChild(header);
             }
 
+            // Ports section
+            if (container.ports && container.ports.length > 0) {
+                const portsDiv = document.createElement('div');
+                portsDiv.className = 'docker-ports';
+                container.ports.forEach(port => {
+                    if (port.public) {
+                        const badge = document.createElement('span');
+                        badge.className = 'docker-port-badge';
+                        badge.innerHTML = `<span class="port-public">${port.public}</span><span class="port-arrow">→</span><span class="port-private">${port.private}</span>`;
+                        portsDiv.appendChild(badge);
+                    }
+                });
+                if (portsDiv.children.length > 0) {
+                    card.appendChild(portsDiv);
+                }
+            }
+
             // Controls row
             const controls = document.createElement('div');
             controls.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap;';
@@ -1314,13 +1399,13 @@ async function renderDockerManager() {
             const actionBtn = document.createElement('button');
             actionBtn.className = 'btn-sm';
             actionBtn.style.cssText = `flex: 1; padding: 8px; background: ${isRunning ? '#ef4444' : '#10b981'}; color: white; border: none; border-radius: 6px; cursor: pointer;`;
-            actionBtn.textContent = isRunning ? 'Stop' : 'Start';
+            actionBtn.textContent = isRunning ? t('docker.stop', 'Detener') : t('docker.start', 'Iniciar');
             actionBtn.addEventListener('click', () => handleDockerAction(container.id, isRunning ? 'stop' : 'start', actionBtn));
 
             const restartBtn = document.createElement('button');
             restartBtn.className = 'btn-sm';
             restartBtn.style.cssText = 'flex: 1; padding: 8px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer;';
-            restartBtn.textContent = 'Restart';
+            restartBtn.textContent = t('docker.restart', 'Reiniciar');
             restartBtn.addEventListener('click', () => handleDockerAction(container.id, 'restart', restartBtn));
 
             controls.appendChild(actionBtn);
@@ -1330,12 +1415,63 @@ async function renderDockerManager() {
                 const updateBtn = document.createElement('button');
                 updateBtn.className = 'btn-sm';
                 updateBtn.style.cssText = 'width: 100%; margin-top: 8px; padding: 10px; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;';
-                updateBtn.innerHTML = '⬆️ Update Container';
+                updateBtn.innerHTML = '⬆️ ' + t('docker.updateContainer', 'Actualizar');
                 updateBtn.addEventListener('click', () => updateContainer(container.id, container.name, updateBtn));
                 controls.appendChild(updateBtn);
             }
 
             card.appendChild(controls);
+
+            // Action buttons row (logs, web, edit)
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'docker-actions-row';
+
+            if (isRunning) {
+                // Logs button
+                const logsBtn = document.createElement('button');
+                logsBtn.className = 'docker-action-btn logs';
+                logsBtn.innerHTML = '📜 ' + t('docker.viewLogs', 'Logs');
+                logsBtn.addEventListener('click', () => openContainerLogs(container.id, container.name));
+                actionsRow.appendChild(logsBtn);
+
+                // Open Web button (if has public ports)
+                const webPort = container.ports?.find(p => p.public);
+                if (webPort) {
+                    const webBtn = document.createElement('button');
+                    webBtn.className = 'docker-action-btn web';
+                    webBtn.innerHTML = '🌐 ' + t('docker.openWebUI', 'Web');
+                    webBtn.addEventListener('click', () => {
+                        window.open(`http://${window.location.hostname}:${webPort.public}`, '_blank');
+                    });
+                    actionsRow.appendChild(webBtn);
+                }
+            } else {
+                // Edit compose button (for stopped containers with compose)
+                if (container.compose) {
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'docker-action-btn edit';
+                    editBtn.innerHTML = '✏️ ' + t('docker.editCompose', 'Editar');
+                    editBtn.addEventListener('click', () => openEditComposeModal(container.compose.name));
+                    actionsRow.appendChild(editBtn);
+                }
+            }
+
+            if (actionsRow.children.length > 0) {
+                card.appendChild(actionsRow);
+            }
+
+            // Notes section
+            const notesDiv = document.createElement('div');
+            notesDiv.className = 'docker-notes';
+            notesDiv.innerHTML = `
+                <div class="docker-notes-header">
+                    <span>📝 ${t('docker.notes', 'Notas')}</span>
+                    <button class="btn-sm" style="padding: 4px 8px; font-size: 0.7rem;" onclick="saveContainerNotes('${container.id}', this.parentElement.nextElementSibling.value).then(ok => ok && alert('${t('common.success', 'Guardado')}'))">${t('docker.saveNote', 'Guardar')}</button>
+                </div>
+                <textarea class="docker-notes-input" placeholder="${t('docker.addNote', 'Añadir notas, contraseñas, etc...')}">${escapeHtml(container.notes || '')}</textarea>
+            `;
+            card.appendChild(notesDiv);
+
             containerGrid.appendChild(card);
         });
 
@@ -1724,9 +1860,91 @@ async function deleteCompose(name) {
     }
 }
 
+// Edit compose modal
+async function openEditComposeModal(composeName) {
+    // Fetch current compose content
+    let content = '';
+    try {
+        const res = await authFetch(`${API_BASE}/docker/compose/${encodeURIComponent(composeName)}`);
+        if (res.ok) {
+            const data = await res.json();
+            content = data.content || '';
+        }
+    } catch (e) {
+        console.error('Error fetching compose:', e);
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.innerHTML = `
+        <div class="glass-card modal-content" style="max-width: 700px; max-height: 80vh; overflow-y: auto;">
+            <header class="modal-header">
+                <h3>✏️ ${t('docker.editCompose', 'Editar Compose')}: ${escapeHtml(composeName)}</h3>
+                <button class="btn-close" onclick="this.closest('.modal').remove()">&times;</button>
+            </header>
+            <div style="padding: 20px;">
+                <textarea id="edit-compose-content" style="
+                    width: 100%; height: 400px; background: rgba(0,0,0,0.3);
+                    border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+                    color: white; font-family: monospace; padding: 15px; resize: vertical;
+                ">${escapeHtml(content)}</textarea>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 10px; padding: 15px;">
+                <button class="btn-primary" style="background: var(--text-dim);" onclick="this.closest('.modal').remove()">
+                    ${t('common.cancel', 'Cancelar')}
+                </button>
+                <button id="save-edit-compose" class="btn-primary">
+                    ${t('common.save', 'Guardar')}
+                </button>
+                <button id="save-run-edit-compose" class="btn-primary" style="background: #10b981;">
+                    ${t('docker.saveAndRun', 'Guardar y Ejecutar')}
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const saveHandler = async (andRun) => {
+        const newContent = document.getElementById('edit-compose-content').value;
+        try {
+            // Save compose
+            const saveRes = await authFetch(`${API_BASE}/docker/compose/${encodeURIComponent(composeName)}`, {
+                method: 'PUT',
+                body: JSON.stringify({ content: newContent })
+            });
+            if (!saveRes.ok) {
+                const data = await saveRes.json();
+                throw new Error(data.error || 'Failed to save');
+            }
+
+            if (andRun) {
+                // Run compose
+                const runRes = await authFetch(`${API_BASE}/docker/compose/up`, {
+                    method: 'POST',
+                    body: JSON.stringify({ name: composeName })
+                });
+                if (!runRes.ok) {
+                    const data = await runRes.json();
+                    throw new Error(data.error || 'Failed to run');
+                }
+            }
+
+            modal.remove();
+            renderContent('docker');
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    };
+
+    document.getElementById('save-edit-compose').addEventListener('click', () => saveHandler(false));
+    document.getElementById('save-run-edit-compose').addEventListener('click', () => saveHandler(true));
+}
+
 window.checkDockerUpdates = checkDockerUpdates;
 window.updateContainer = updateContainer;
 window.openComposeModal = openComposeModal;
+window.openEditComposeModal = openEditComposeModal;
 
 async function handleDockerAction(id, action, btn) {
     if (!btn) return;
@@ -1927,7 +2145,8 @@ async function renderNetworkManager() {
         serviceH4.textContent = service.name || 'Unknown';
         const statusInfo = document.createElement('span');
         statusInfo.style.fontSize = '0.75rem';
-        statusInfo.innerHTML = `<span class="status-dot ${isOnline ? 'status-check-online' : 'status-check-offline'}"></span>${(service.status || 'unknown').toUpperCase()}`;
+        // SECURITY: Escape service.status to prevent XSS
+        statusInfo.innerHTML = `<span class="status-dot ${isOnline ? 'status-check-online' : 'status-check-offline'}"></span>${escapeHtml((service.status || 'unknown').toUpperCase())}`;
         headerInfo.appendChild(serviceH4);
         headerInfo.appendChild(statusInfo);
 
@@ -2506,7 +2725,7 @@ if (resetBtn) {
 const logoutBtn = document.getElementById("logout-btn");
 if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
-        if (confirm("Are you sure you want to logout?")) {
+        if (confirm(t('common.confirmLogout', "Are you sure you want to logout?"))) {
             clearSession();
             state.isAuthenticated = false;
             state.user = null;
@@ -2515,5 +2734,400 @@ if (logoutBtn) {
     });
 }
 
-initAuth();
-console.log("HomePiNAS Core v1.1.0 Loaded - (Secure Auth Active)");
+// =============================================================================
+// TERMINAL VIEW
+// =============================================================================
+
+async function renderTerminalView() {
+    // Fetch shortcuts
+    try {
+        const res = await authFetch(`${API_BASE}/shortcuts`);
+        if (res.ok) {
+            const data = await res.json();
+            state.shortcuts = { defaults: data.defaults || [], custom: data.custom || [] };
+        }
+    } catch (e) {
+        console.error('Shortcuts fetch error:', e);
+    }
+
+    const container = document.createElement('div');
+    container.className = 'terminal-view-container';
+    container.style.width = '100%';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'glass-card';
+    header.style.cssText = 'grid-column: 1 / -1; margin-bottom: 20px;';
+    header.innerHTML = `
+        <h3>${t('terminal.title', 'Terminal y Herramientas')}</h3>
+        <p style="color: var(--text-dim); margin-top: 10px;">
+            ${t('shortcuts.defaultShortcuts', 'Accesos rápidos a herramientas del sistema')}
+        </p>
+    `;
+    container.appendChild(header);
+
+    // Shortcuts grid
+    const grid = document.createElement('div');
+    grid.className = 'terminal-grid';
+
+    // Default shortcuts
+    const allShortcuts = [...state.shortcuts.defaults, ...state.shortcuts.custom];
+    
+    allShortcuts.forEach(shortcut => {
+        const card = document.createElement('div');
+        card.className = 'glass-card shortcut-card';
+        card.innerHTML = `
+            <div class="icon">${escapeHtml(shortcut.icon || '💻')}</div>
+            <div class="name">${escapeHtml(shortcut.name)}</div>
+            <div class="description">${escapeHtml(shortcut.description || shortcut.command)}</div>
+        `;
+        card.addEventListener('click', () => openTerminal(shortcut.command, shortcut.name));
+        grid.appendChild(card);
+    });
+
+    // Add new shortcut button
+    const addCard = document.createElement('div');
+    addCard.className = 'glass-card shortcut-card add-new';
+    addCard.innerHTML = `
+        <div class="icon">➕</div>
+        <div class="name">${t('shortcuts.addShortcut', 'Añadir Acceso Directo')}</div>
+    `;
+    addCard.addEventListener('click', openAddShortcutModal);
+    grid.appendChild(addCard);
+
+    container.appendChild(grid);
+    dashboardContent.appendChild(container);
+}
+
+// Terminal WebSocket connection
+let terminalWs = null;
+let terminal = null;
+let fitAddon = null;
+
+function openTerminal(command = 'bash', title = 'Terminal') {
+    const modal = document.getElementById('terminal-modal');
+    const containerEl = document.getElementById('terminal-container');
+    const statusEl = document.getElementById('terminal-status-text');
+
+    if (!modal || !containerEl) {
+        console.error('Terminal modal not found');
+        return;
+    }
+
+    // Show modal
+    modal.classList.add('active');
+    containerEl.innerHTML = '';
+
+    // Initialize xterm.js
+    if (typeof Terminal !== 'undefined') {
+        terminal = new Terminal({
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: '"Fira Code", "Monaco", "Consolas", monospace',
+            theme: {
+                background: '#0d0d0d',
+                foreground: '#e5e5e5',
+                cursor: '#84cc16',
+                selection: 'rgba(132, 204, 22, 0.3)'
+            },
+            scrollback: 5000
+        });
+
+        // Load addons
+        if (typeof FitAddon !== 'undefined') {
+            fitAddon = new FitAddon.FitAddon();
+            terminal.loadAddon(fitAddon);
+        }
+
+        if (typeof WebLinksAddon !== 'undefined') {
+            terminal.loadAddon(new WebLinksAddon.WebLinksAddon());
+        }
+
+        terminal.open(containerEl);
+        
+        if (fitAddon) {
+            setTimeout(() => fitAddon.fit(), 100);
+        }
+
+        // Connect WebSocket
+        const sessionId = `term-${Date.now()}`;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/api/terminal/ws?sessionId=${sessionId}&command=${encodeURIComponent(command)}&token=${state.sessionId}`;
+
+        statusEl.textContent = t('terminal.connecting', 'Conectando...');
+
+        terminalWs = new WebSocket(wsUrl);
+
+        terminalWs.onopen = () => {
+            statusEl.textContent = t('terminal.connected', 'Conectado');
+            document.querySelector('.terminal-status').classList.remove('disconnected');
+        };
+
+        terminalWs.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'output') {
+                    terminal.write(msg.data);
+                } else if (msg.type === 'exit') {
+                    terminal.write(`\\r\\n\\x1b[33m[Proceso terminado con código ${msg.exitCode}]\\x1b[0m\\r\\n`);
+                    statusEl.textContent = t('terminal.disconnected', 'Desconectado');
+                    document.querySelector('.terminal-status').classList.add('disconnected');
+                }
+            } catch (e) {
+                console.error('Terminal message error:', e);
+            }
+        };
+
+        terminalWs.onclose = () => {
+            statusEl.textContent = t('terminal.disconnected', 'Desconectado');
+            document.querySelector('.terminal-status').classList.add('disconnected');
+        };
+
+        terminalWs.onerror = (err) => {
+            console.error('Terminal WebSocket error:', err);
+            statusEl.textContent = 'Error de conexión';
+        };
+
+        // Send input to WebSocket
+        terminal.onData((data) => {
+            if (terminalWs && terminalWs.readyState === WebSocket.OPEN) {
+                terminalWs.send(JSON.stringify({ type: 'input', data }));
+            }
+        });
+
+        // Handle resize
+        terminal.onResize(({ cols, rows }) => {
+            if (terminalWs && terminalWs.readyState === WebSocket.OPEN) {
+                terminalWs.send(JSON.stringify({ type: 'resize', cols, rows }));
+            }
+        });
+
+    } else {
+        containerEl.innerHTML = '<p style="color: #ef4444; padding: 20px;">Error: xterm.js no disponible</p>';
+    }
+}
+
+function closeTerminal() {
+    const modal = document.getElementById('terminal-modal');
+    if (modal) modal.classList.remove('active');
+
+    if (terminalWs) {
+        terminalWs.close();
+        terminalWs = null;
+    }
+
+    if (terminal) {
+        terminal.dispose();
+        terminal = null;
+    }
+}
+
+// Terminal modal controls
+const closeTerminalBtn = document.getElementById('close-terminal-modal');
+if (closeTerminalBtn) {
+    closeTerminalBtn.addEventListener('click', closeTerminal);
+}
+
+const terminalFullscreenBtn = document.getElementById('terminal-fullscreen');
+if (terminalFullscreenBtn) {
+    terminalFullscreenBtn.addEventListener('click', () => {
+        const modalContent = document.querySelector('.terminal-modal-content');
+        if (modalContent) {
+            modalContent.classList.toggle('fullscreen');
+            if (fitAddon) fitAddon.fit();
+        }
+    });
+}
+
+// Close terminal on escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const terminalModal = document.getElementById('terminal-modal');
+        if (terminalModal && terminalModal.classList.contains('active')) {
+            closeTerminal();
+        }
+    }
+});
+
+// Resize terminal on window resize
+window.addEventListener('resize', () => {
+    if (fitAddon && terminal) {
+        fitAddon.fit();
+    }
+});
+
+// =============================================================================
+// SHORTCUTS MODAL
+// =============================================================================
+
+function openAddShortcutModal() {
+    const modal = document.createElement('div');
+    modal.id = 'shortcut-modal';
+    modal.className = 'modal active';
+    modal.innerHTML = `
+        <div class="glass-card modal-content" style="max-width: 500px;">
+            <header class="modal-header">
+                <h3>${t('shortcuts.addShortcut', 'Añadir Acceso Directo')}</h3>
+                <button class="btn-close" onclick="this.closest('.modal').remove()">&times;</button>
+            </header>
+            <form id="shortcut-form">
+                <div class="input-group">
+                    <input type="text" id="shortcut-name" required placeholder=" ">
+                    <label>${t('shortcuts.name', 'Nombre')}</label>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="shortcut-command" required placeholder=" ">
+                    <label>${t('shortcuts.command', 'Comando')}</label>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="shortcut-description" placeholder=" ">
+                    <label>${t('shortcuts.description', 'Descripción')}</label>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 10px; color: var(--text-dim);">${t('shortcuts.icon', 'Icono')}</label>
+                    <div id="icon-picker" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                </div>
+                <input type="hidden" id="shortcut-icon" value="💻">
+                <div class="modal-footer" style="display: flex; gap: 10px;">
+                    <button type="button" class="btn-primary" style="background: var(--text-dim);" onclick="this.closest('.modal').remove()">
+                        ${t('common.cancel', 'Cancelar')}
+                    </button>
+                    <button type="submit" class="btn-primary">${t('common.save', 'Guardar')}</button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Populate icon picker
+    const icons = ['💻', '📊', '📁', '📝', '🐳', '📜', '💾', '🧠', '⚙️', '🔧', '📦', '🌐', '🔒', '📡', '⏱️', '🎯', '🚀', '💡', '🔍', '📈'];
+    const iconPicker = document.getElementById('icon-picker');
+    icons.forEach(icon => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.style.cssText = 'width: 40px; height: 40px; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card-bg); font-size: 1.2rem; cursor: pointer;';
+        btn.textContent = icon;
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#icon-picker button').forEach(b => b.style.borderColor = 'var(--card-border)');
+            btn.style.borderColor = 'var(--primary)';
+            document.getElementById('shortcut-icon').value = icon;
+        });
+        iconPicker.appendChild(btn);
+    });
+
+    // Form submit
+    document.getElementById('shortcut-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('shortcut-name').value.trim();
+        const command = document.getElementById('shortcut-command').value.trim();
+        const description = document.getElementById('shortcut-description').value.trim();
+        const icon = document.getElementById('shortcut-icon').value;
+
+        try {
+            const res = await authFetch(`${API_BASE}/shortcuts`, {
+                method: 'POST',
+                body: JSON.stringify({ name, command, description, icon })
+            });
+            const data = await res.json();
+
+            if (!res.ok) throw new Error(data.error || 'Failed to create shortcut');
+
+            modal.remove();
+            renderContent('terminal');
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    });
+}
+
+// =============================================================================
+// DOCKER VIEW LOGS
+// =============================================================================
+
+async function openContainerLogs(containerId, containerName) {
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.innerHTML = `
+        <div class="glass-card logs-modal-content">
+            <header class="modal-header" style="padding: 15px 20px; border-bottom: 1px solid var(--card-border);">
+                <h3>📜 Logs: ${escapeHtml(containerName)}</h3>
+                <button class="btn-close" onclick="this.closest('.modal').remove()">&times;</button>
+            </header>
+            <div class="logs-container" id="logs-content">
+                <span style="color: var(--text-dim);">${t('common.loading', 'Cargando...')}</span>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    try {
+        const res = await authFetch(`${API_BASE}/docker/logs/${containerId}?tail=200`);
+        const data = await res.json();
+        
+        const logsEl = document.getElementById('logs-content');
+        if (data.logs) {
+            logsEl.textContent = data.logs;
+            logsEl.scrollTop = logsEl.scrollHeight;
+        } else {
+            logsEl.innerHTML = '<span style="color: var(--text-dim);">No logs available</span>';
+        }
+    } catch (e) {
+        document.getElementById('logs-content').innerHTML = `<span style="color: #ef4444;">Error: ${escapeHtml(e.message)}</span>`;
+    }
+}
+
+window.openContainerLogs = openContainerLogs;
+
+// =============================================================================
+// DOCKER NOTES
+// =============================================================================
+
+async function saveContainerNotes(containerId, notes) {
+    try {
+        const res = await authFetch(`${API_BASE}/docker/notes/${containerId}`, {
+            method: 'POST',
+            body: JSON.stringify({ notes })
+        });
+        if (!res.ok) throw new Error('Failed to save notes');
+        return true;
+    } catch (e) {
+        console.error('Save notes error:', e);
+        return false;
+    }
+}
+
+window.saveContainerNotes = saveContainerNotes;
+
+// =============================================================================
+// ENHANCED STORAGE VIEW
+// =============================================================================
+
+// This updates renderStorageDashboard to include mount points and Cockpit-style view
+// The function is already defined, we just need to ensure it renders properly
+
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
+
+// Initialize i18n first, then auth
+async function init() {
+    await initI18n();
+    initAuth();
+}
+
+// Listen for language changes to re-render current view
+window.addEventListener('i18n-updated', () => {
+    if (state.isAuthenticated && state.currentView) {
+        // Update view title
+        const viewTitleEl = document.getElementById('view-title');
+        if (viewTitleEl && viewsMap[state.currentView]) {
+            viewTitleEl.textContent = viewsMap[state.currentView];
+        }
+        // Re-apply translations
+        applyTranslations();
+    }
+});
+
+init();
+console.log("HomePiNAS Core v2.1.0 Loaded - (Secure Auth + Terminal + i18n Active)");

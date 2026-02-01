@@ -7,7 +7,7 @@
 set -e
 
 # Version - CHANGE THIS FOR EACH RELEASE
-VERSION="3.0.6"
+VERSION="3.1.0"
 
 # Storage backend (will be set by user selection)
 STORAGE_BACKEND=""
@@ -399,6 +399,9 @@ install_package_safe "lm-sensors" "sensors"
 install_package_safe "pigz" ""
 install_package_safe "samba" ""
 install_package_safe "samba-common-bin" ""
+install_package_safe "mc" ""
+install_package_safe "tmux" ""
+install_package_safe "htop" ""
 
 # Install Docker based on OS type
 echo -e "${BLUE}Installing Docker...${NC}"

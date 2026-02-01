@@ -1,13 +1,16 @@
 /**
  * HomePiNAS - Docker Routes
- * v1.5.8 - Enhanced Docker Manager
+ * v3.1.0 - Enhanced Docker Manager
  *
  * Features:
- * - List containers with CPU/RAM stats and update status
+ * - List containers with CPU/RAM stats, ports, and update status
+ * - Container notes/comments (passwords, notes)
  * - Import and run docker-compose files
  * - Check for image updates (pull and compare IDs)
  * - Update containers (stop, remove, pull, recreate)
  * - Compose stack management (up, down, delete)
+ * - Container logs streaming
+ * - Find compose file for container
  */
 
 const express = require('express');
@@ -19,17 +22,91 @@ const { execSync, exec } = require('child_process');
 
 const { requireAuth } = require('../middleware/auth');
 const { logSecurityEvent } = require('../utils/security');
-const { validateDockerAction } = require('../utils/sanitize');
+const { validateDockerAction, validateContainerId, sanitizeComposeName, validateComposeContent } = require('../utils/sanitize');
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
 // Paths for compose files and update cache
 const COMPOSE_DIR = path.join(__dirname, '..', 'config', 'compose');
 const UPDATE_CACHE_FILE = path.join(__dirname, '..', 'config', 'docker-updates.json');
+const CONTAINER_NOTES_FILE = path.join(__dirname, '..', 'config', 'container-notes.json');
 
 // Ensure directories exist
 if (!fs.existsSync(COMPOSE_DIR)) {
     fs.mkdirSync(COMPOSE_DIR, { recursive: true });
+}
+
+// Load container notes
+function loadContainerNotes() {
+    try {
+        if (fs.existsSync(CONTAINER_NOTES_FILE)) {
+            return JSON.parse(fs.readFileSync(CONTAINER_NOTES_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Error loading container notes:', e.message);
+    }
+    return {};
+}
+
+// Save container notes
+function saveContainerNotes(notes) {
+    try {
+        fs.writeFileSync(CONTAINER_NOTES_FILE, JSON.stringify(notes, null, 2));
+        return true;
+    } catch (e) {
+        console.error('Error saving container notes:', e.message);
+        return false;
+    }
+}
+
+// Find compose file for a container
+function findComposeForContainer(containerName) {
+    try {
+        const dirs = fs.readdirSync(COMPOSE_DIR);
+        for (const dir of dirs) {
+            const composeFile = path.join(COMPOSE_DIR, dir, 'docker-compose.yml');
+            if (fs.existsSync(composeFile)) {
+                const content = fs.readFileSync(composeFile, 'utf8');
+                // Check if this compose file defines this container
+                if (content.includes(`container_name: ${containerName}`) || 
+                    content.includes(`container_name: "${containerName}"`) ||
+                    content.includes(`container_name: '${containerName}'`)) {
+                    return { name: dir, path: composeFile };
+                }
+                // Also check service name
+                const serviceRegex = new RegExp(`^\\s*${containerName}:\\s*$`, 'm');
+                if (serviceRegex.test(content)) {
+                    return { name: dir, path: composeFile };
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Error finding compose for container:', e.message);
+    }
+    return null;
+}
+
+// Parse port mappings from container info
+function parsePortMappings(ports) {
+    if (!ports || !Array.isArray(ports)) return [];
+    return ports.map(p => {
+        if (p.PublicPort && p.PrivatePort) {
+            return {
+                public: p.PublicPort,
+                private: p.PrivatePort,
+                type: p.Type || 'tcp',
+                ip: p.IP || '0.0.0.0'
+            };
+        } else if (p.PrivatePort) {
+            return {
+                public: null,
+                private: p.PrivatePort,
+                type: p.Type || 'tcp',
+                ip: null
+            };
+        }
+        return null;
+    }).filter(Boolean);
 }
 
 // Load update cache
@@ -53,11 +130,12 @@ function saveUpdateCache(cache) {
     }
 }
 
-// List containers with update status
+// List containers with update status, ports, and notes
 router.get('/containers', async (req, res) => {
     try {
         const containers = await docker.listContainers({ all: true });
         const updateCache = loadUpdateCache();
+        const containerNotes = loadContainerNotes();
 
         const result = await Promise.all(containers.map(async (c) => {
             const name = c.Names[0].replace('/', '');
@@ -65,6 +143,15 @@ router.get('/containers', async (req, res) => {
 
             // Check if update is available from cache
             const hasUpdate = updateCache.updates[image] || false;
+
+            // Get port mappings
+            const ports = parsePortMappings(c.Ports);
+
+            // Get notes for this container
+            const notes = containerNotes[name] || containerNotes[c.Id] || '';
+
+            // Find compose file if any
+            const compose = findComposeForContainer(name);
 
             // Get container stats if running
             let cpu = '---';
@@ -96,6 +183,9 @@ router.get('/containers', async (req, res) => {
                 image,
                 cpu,
                 ram,
+                ports,
+                notes,
+                compose,
                 hasUpdate,
                 created: c.Created
             };
@@ -112,8 +202,9 @@ router.get('/containers', async (req, res) => {
 router.post('/action', requireAuth, async (req, res) => {
     const { id, action } = req.body;
 
-    if (!id || typeof id !== 'string') {
-        return res.status(400).json({ error: 'Invalid container ID' });
+    // SECURITY: Validate container ID format (hex string, 12-64 chars)
+    if (!validateContainerId(id)) {
+        return res.status(400).json({ error: 'Invalid container ID format' });
     }
 
     if (!validateDockerAction(action)) {
@@ -228,8 +319,9 @@ router.get('/update-status', async (req, res) => {
 router.post('/update', requireAuth, async (req, res) => {
     const { containerId } = req.body;
 
-    if (!containerId) {
-        return res.status(400).json({ error: 'Container ID required' });
+    // SECURITY: Validate container ID format
+    if (!validateContainerId(containerId)) {
+        return res.status(400).json({ error: 'Invalid container ID format' });
     }
 
     try {
@@ -301,10 +393,16 @@ router.post('/compose/import', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Name and content required' });
     }
 
-    // Sanitize name
-    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50);
+    // SECURITY: Sanitize name using dedicated function
+    const safeName = sanitizeComposeName(name);
     if (!safeName) {
-        return res.status(400).json({ error: 'Invalid compose name' });
+        return res.status(400).json({ error: 'Invalid compose name (alphanumeric, dashes, underscores only)' });
+    }
+
+    // SECURITY: Validate compose content
+    const contentValidation = validateComposeContent(content);
+    if (!contentValidation.valid) {
+        return res.status(400).json({ error: contentValidation.error });
     }
 
     try {
@@ -367,9 +465,20 @@ router.post('/compose/up', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Compose name required' });
     }
 
-    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '');
+    // SECURITY: Use dedicated sanitization function
+    const safeName = sanitizeComposeName(name);
+    if (!safeName) {
+        return res.status(400).json({ error: 'Invalid compose name' });
+    }
+
     const composeDir = path.join(COMPOSE_DIR, safeName);
     const composeFile = path.join(composeDir, 'docker-compose.yml');
+
+    // SECURITY: Verify path doesn't escape COMPOSE_DIR
+    const resolvedDir = path.resolve(composeDir);
+    if (!resolvedDir.startsWith(path.resolve(COMPOSE_DIR))) {
+        return res.status(400).json({ error: 'Invalid compose path' });
+    }
 
     if (!fs.existsSync(composeFile)) {
         return res.status(404).json({ error: 'Compose file not found' });
@@ -378,8 +487,10 @@ router.post('/compose/up', requireAuth, async (req, res) => {
     try {
         logSecurityEvent('DOCKER_COMPOSE_UP', { name: safeName, user: req.user.username }, req.ip);
 
-        // Run docker-compose up -d
-        const output = execSync(`cd "${composeDir}" && docker compose up -d 2>&1`, {
+        // SECURITY: Use execFile with explicit arguments instead of shell interpolation
+        const { execFileSync } = require('child_process');
+        const output = execFileSync('docker', ['compose', 'up', '-d'], {
+            cwd: composeDir,
             encoding: 'utf8',
             timeout: 300000 // 5 minutes
         });
@@ -393,7 +504,7 @@ router.post('/compose/up', requireAuth, async (req, res) => {
         console.error('Compose up error:', e);
         res.status(500).json({
             error: 'Failed to start compose',
-            details: e.message
+            details: e.stderr || e.message
         });
     }
 });
@@ -406,9 +517,20 @@ router.post('/compose/down', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Compose name required' });
     }
 
-    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '');
+    // SECURITY: Use dedicated sanitization function
+    const safeName = sanitizeComposeName(name);
+    if (!safeName) {
+        return res.status(400).json({ error: 'Invalid compose name' });
+    }
+
     const composeDir = path.join(COMPOSE_DIR, safeName);
     const composeFile = path.join(composeDir, 'docker-compose.yml');
+
+    // SECURITY: Verify path doesn't escape COMPOSE_DIR
+    const resolvedDir = path.resolve(composeDir);
+    if (!resolvedDir.startsWith(path.resolve(COMPOSE_DIR))) {
+        return res.status(400).json({ error: 'Invalid compose path' });
+    }
 
     if (!fs.existsSync(composeFile)) {
         return res.status(404).json({ error: 'Compose file not found' });
@@ -417,7 +539,10 @@ router.post('/compose/down', requireAuth, async (req, res) => {
     try {
         logSecurityEvent('DOCKER_COMPOSE_DOWN', { name: safeName, user: req.user.username }, req.ip);
 
-        const output = execSync(`cd "${composeDir}" && docker compose down 2>&1`, {
+        // SECURITY: Use execFile with explicit arguments
+        const { execFileSync } = require('child_process');
+        const output = execFileSync('docker', ['compose', 'down'], {
+            cwd: composeDir,
             encoding: 'utf8',
             timeout: 120000
         });
@@ -435,8 +560,19 @@ router.post('/compose/down', requireAuth, async (req, res) => {
 
 // Delete compose file
 router.delete('/compose/:name', requireAuth, async (req, res) => {
-    const safeName = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
+    // SECURITY: Use dedicated sanitization function
+    const safeName = sanitizeComposeName(req.params.name);
+    if (!safeName) {
+        return res.status(400).json({ error: 'Invalid compose name' });
+    }
+
     const composeDir = path.join(COMPOSE_DIR, safeName);
+
+    // SECURITY: Verify path doesn't escape COMPOSE_DIR
+    const resolvedDir = path.resolve(composeDir);
+    if (!resolvedDir.startsWith(path.resolve(COMPOSE_DIR))) {
+        return res.status(400).json({ error: 'Invalid compose path' });
+    }
 
     if (!fs.existsSync(composeDir)) {
         return res.status(404).json({ error: 'Compose not found' });
@@ -445,9 +581,14 @@ router.delete('/compose/:name', requireAuth, async (req, res) => {
     try {
         // Stop containers first
         try {
-            execSync(`cd "${composeDir}" && docker compose down 2>&1`, { encoding: 'utf8', timeout: 60000 });
+            const { execFileSync } = require('child_process');
+            execFileSync('docker', ['compose', 'down'], {
+                cwd: composeDir,
+                encoding: 'utf8',
+                timeout: 60000
+            });
         } catch (e) {
-            // Ignore errors
+            // Ignore errors - containers may not be running
         }
 
         // Remove directory
@@ -464,8 +605,19 @@ router.delete('/compose/:name', requireAuth, async (req, res) => {
 
 // Get compose file content
 router.get('/compose/:name', async (req, res) => {
-    const safeName = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
+    // SECURITY: Use dedicated sanitization function
+    const safeName = sanitizeComposeName(req.params.name);
+    if (!safeName) {
+        return res.status(400).json({ error: 'Invalid compose name' });
+    }
+
     const composeFile = path.join(COMPOSE_DIR, safeName, 'docker-compose.yml');
+
+    // SECURITY: Verify path doesn't escape COMPOSE_DIR
+    const resolvedFile = path.resolve(composeFile);
+    if (!resolvedFile.startsWith(path.resolve(COMPOSE_DIR))) {
+        return res.status(400).json({ error: 'Invalid compose path' });
+    }
 
     if (!fs.existsSync(composeFile)) {
         return res.status(404).json({ error: 'Compose not found' });
@@ -476,6 +628,138 @@ router.get('/compose/:name', async (req, res) => {
         res.json({ name: safeName, content });
     } catch (e) {
         res.status(500).json({ error: 'Failed to read compose file' });
+    }
+});
+
+// Update compose file content
+router.put('/compose/:name', requireAuth, async (req, res) => {
+    const { content } = req.body;
+    
+    if (!content) {
+        return res.status(400).json({ error: 'Content required' });
+    }
+
+    // SECURITY: Use dedicated sanitization function
+    const safeName = sanitizeComposeName(req.params.name);
+    if (!safeName) {
+        return res.status(400).json({ error: 'Invalid compose name' });
+    }
+
+    // SECURITY: Validate compose content
+    const contentValidation = validateComposeContent(content);
+    if (!contentValidation.valid) {
+        return res.status(400).json({ error: contentValidation.error });
+    }
+
+    const composeFile = path.join(COMPOSE_DIR, safeName, 'docker-compose.yml');
+
+    // SECURITY: Verify path doesn't escape COMPOSE_DIR
+    const resolvedFile = path.resolve(composeFile);
+    if (!resolvedFile.startsWith(path.resolve(COMPOSE_DIR))) {
+        return res.status(400).json({ error: 'Invalid compose path' });
+    }
+
+    if (!fs.existsSync(composeFile)) {
+        return res.status(404).json({ error: 'Compose not found' });
+    }
+
+    try {
+        fs.writeFileSync(composeFile, content, 'utf8');
+        logSecurityEvent('DOCKER_COMPOSE_EDIT', { name: safeName, user: req.user.username }, req.ip);
+        res.json({ success: true, message: `Compose "${safeName}" updated` });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to update compose file' });
+    }
+});
+
+// =============================================================================
+// CONTAINER NOTES
+// =============================================================================
+
+// Get notes for a container
+router.get('/notes/:containerId', requireAuth, async (req, res) => {
+    const { containerId } = req.params;
+    
+    if (!validateContainerId(containerId)) {
+        return res.status(400).json({ error: 'Invalid container ID' });
+    }
+
+    const notes = loadContainerNotes();
+    res.json({ notes: notes[containerId] || '' });
+});
+
+// Save notes for a container
+router.post('/notes/:containerId', requireAuth, async (req, res) => {
+    const { containerId } = req.params;
+    const { notes } = req.body;
+    
+    if (!validateContainerId(containerId)) {
+        return res.status(400).json({ error: 'Invalid container ID' });
+    }
+
+    if (typeof notes !== 'string') {
+        return res.status(400).json({ error: 'Notes must be a string' });
+    }
+
+    // Limit notes length
+    const safeNotes = notes.substring(0, 5000);
+
+    const allNotes = loadContainerNotes();
+    
+    if (safeNotes.trim()) {
+        allNotes[containerId] = safeNotes;
+    } else {
+        delete allNotes[containerId];
+    }
+
+    if (saveContainerNotes(allNotes)) {
+        logSecurityEvent('CONTAINER_NOTES_SAVED', { containerId, user: req.user.username }, req.ip);
+        res.json({ success: true, message: 'Notes saved' });
+    } else {
+        res.status(500).json({ error: 'Failed to save notes' });
+    }
+});
+
+// =============================================================================
+// CONTAINER LOGS
+// =============================================================================
+
+// Get container logs
+router.get('/logs/:containerId', requireAuth, async (req, res) => {
+    const { containerId } = req.params;
+    const { tail = 100, since = '' } = req.query;
+    
+    if (!validateContainerId(containerId)) {
+        return res.status(400).json({ error: 'Invalid container ID' });
+    }
+
+    try {
+        const container = docker.getContainer(containerId);
+        
+        const opts = {
+            stdout: true,
+            stderr: true,
+            tail: Math.min(parseInt(tail) || 100, 1000),
+            timestamps: true
+        };
+
+        if (since) {
+            opts.since = parseInt(since);
+        }
+
+        const logs = await container.logs(opts);
+        
+        // Parse logs (remove Docker stream header bytes)
+        const logText = logs.toString('utf8');
+        
+        res.json({ 
+            success: true, 
+            logs: logText,
+            containerId
+        });
+    } catch (e) {
+        console.error('Container logs error:', e.message);
+        res.status(500).json({ error: 'Failed to get container logs' });
     }
 });
 

@@ -22,10 +22,17 @@ function initSessionDb() {
     try {
         const configDir = path.dirname(SESSION_DB_PATH);
         if (!fs.existsSync(configDir)) {
-            fs.mkdirSync(configDir, { recursive: true });
+            fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
         }
 
         sessionDb = new Database(SESSION_DB_PATH);
+
+        // SECURITY: Set restrictive permissions on database file (owner read/write only)
+        try {
+            fs.chmodSync(SESSION_DB_PATH, 0o600);
+        } catch (e) {
+            console.warn('Could not set restrictive permissions on session database');
+        }
 
         sessionDb.exec(`
             CREATE TABLE IF NOT EXISTS sessions (

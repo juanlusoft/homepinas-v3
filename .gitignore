@@ -2,7 +2,26 @@ node_modules
 .DS_Store
 dist
 .env
+.env.*
 backend/config/data.json
+backend/config/sessions.db
+backend/config/sessions.db-wal
+backend/config/sessions.db-shm
+backend/config/docker-updates.json
+backend/config/compose/
+backend/certs/
+*.key
+*.pem
 package-lock.json
 .gemini
 brain
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/

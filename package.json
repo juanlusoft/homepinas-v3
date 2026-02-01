@@ -1,6 +1,6 @@
 {
   "name": "homepinas",
-  "version": "3.0.6",
+  "version": "3.1.0",
   "description": "HomePiNAS - Secure NAS Dashboard for Raspberry Pi",
   "main": "backend/index.js",
   "scripts": {
@@ -13,7 +13,9 @@
     "raspberry-pi",
     "dashboard",
     "snapraid",
-    "mergerfs"
+    "mergerfs",
+    "terminal",
+    "docker"
   ],
   "author": "juanlusoft",
   "license": "MIT",
@@ -26,8 +28,10 @@
     "express": "^5.2.1",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
+    "node-pty": "^1.0.0",
     "systeminformation": "^5.30.6",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"

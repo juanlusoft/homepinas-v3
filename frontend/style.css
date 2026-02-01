@@ -1969,3 +1969,541 @@ input:checked+.slider:before {
     background: rgba(239, 68, 68, 0.4);
     transform: scale(1.1);
 }
+
+/* =============================================================================
+   v2.1.0 NEW STYLES
+   ============================================================================= */
+
+/* Settings Controls (Theme + Language) */
+.settings-controls {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    gap: 8px;
+}
+
+.settings-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px var(--card-shadow);
+}
+
+.settings-btn:hover {
+    transform: scale(1.05);
+    border-color: var(--primary);
+}
+
+[data-theme="dark"] .settings-btn {
+    box-shadow: 0 0 15px var(--primary-glow);
+}
+
+/* Hide old theme toggle */
+.theme-toggle {
+    display: none;
+}
+
+/* Terminal Styles */
+.terminal-modal-content {
+    width: 95%;
+    max-width: 1200px;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+}
+
+.terminal-modal-content .modal-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--card-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.terminal-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.terminal-container {
+    flex: 1;
+    background: #0d0d0d;
+    padding: 10px;
+    overflow: hidden;
+}
+
+.terminal-container .xterm {
+    height: 100%;
+}
+
+.terminal-container .xterm-viewport {
+    overflow-y: auto !important;
+}
+
+.terminal-status {
+    padding: 8px 15px;
+    background: rgba(0, 0, 0, 0.1);
+    border-top: 1px solid var(--card-border);
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.terminal-status::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    animation: pulse-dot 2s infinite;
+}
+
+.terminal-status.disconnected::before {
+    background: #ef4444;
+    animation: none;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Terminal View in Dashboard */
+.terminal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    width: 100%;
+}
+
+.shortcut-card {
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.shortcut-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary);
+}
+
+.shortcut-card .icon {
+    font-size: 2.5rem;
+    text-align: center;
+    margin-bottom: 5px;
+}
+
+.shortcut-card .name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.shortcut-card .description {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    text-align: center;
+}
+
+.shortcut-card.add-new {
+    border: 2px dashed var(--card-border);
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+}
+
+.shortcut-card.add-new:hover {
+    border-color: var(--primary);
+    background: rgba(132, 204, 22, 0.05);
+}
+
+.shortcut-card.add-new .icon {
+    font-size: 2rem;
+    color: var(--primary);
+}
+
+/* Docker Enhanced Styles */
+.docker-ports {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.docker-port-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-family: monospace;
+    color: #a5b4fc;
+}
+
+.docker-port-badge .port-public {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.docker-port-badge .port-arrow {
+    color: var(--text-dim);
+}
+
+.docker-port-badge .port-private {
+    color: #6366f1;
+}
+
+.docker-notes {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 8px;
+    border-left: 3px solid var(--primary);
+}
+
+.docker-notes-input {
+    width: 100%;
+    min-height: 60px;
+    background: transparent;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 8px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    resize: vertical;
+}
+
+.docker-notes-input::placeholder {
+    color: var(--text-dim);
+}
+
+.docker-notes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.docker-actions-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.docker-action-btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+}
+
+.docker-action-btn.logs {
+    background: rgba(99, 102, 241, 0.2);
+    color: #6366f1;
+}
+
+.docker-action-btn.logs:hover {
+    background: rgba(99, 102, 241, 0.3);
+}
+
+.docker-action-btn.web {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.docker-action-btn.web:hover {
+    background: rgba(16, 185, 129, 0.3);
+}
+
+.docker-action-btn.edit {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+.docker-action-btn.edit:hover {
+    background: rgba(245, 158, 11, 0.3);
+}
+
+/* Storage Array View (Cockpit Style) */
+.storage-array-view {
+    width: 100%;
+}
+
+.storage-array-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.storage-array-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.storage-total-stats {
+    display: flex;
+    gap: 20px;
+}
+
+.storage-total-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.storage-total-stat .label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+
+.storage-total-stat .value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.storage-array-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.storage-mount-row {
+    display: grid;
+    grid-template-columns: 200px 1fr 150px 100px;
+    gap: 15px;
+    align-items: center;
+    padding: 15px 20px;
+    background: rgba(0, 0, 0, 0.02);
+    border-radius: 10px;
+    border-left: 4px solid var(--primary);
+}
+
+.storage-mount-row.parity {
+    border-left-color: #f59e0b;
+}
+
+.storage-mount-row.cache {
+    border-left-color: #10b981;
+}
+
+.storage-mount-row.pool {
+    border-left-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.1);
+}
+
+.mount-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mount-path {
+    font-family: monospace;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.mount-device {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+
+.mount-bar-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mount-bar {
+    height: 10px;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.mount-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.5s ease;
+}
+
+.mount-bar-fill.low {
+    background: #10b981;
+}
+
+.mount-bar-fill.medium {
+    background: #f59e0b;
+}
+
+.mount-bar-fill.high {
+    background: #ef4444;
+}
+
+.mount-bar-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+
+.mount-size {
+    text-align: right;
+}
+
+.mount-size .available {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.mount-size .total {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+
+.mount-type {
+    text-align: center;
+}
+
+.mount-type-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.mount-type-badge.ext4 {
+    background: rgba(99, 102, 241, 0.2);
+    color: #6366f1;
+}
+
+.mount-type-badge.mergerfs {
+    background: rgba(139, 92, 246, 0.2);
+    color: #8b5cf6;
+}
+
+.mount-type-badge.xfs {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+/* Responsive adjustments for storage view */
+@media (max-width: 900px) {
+    .storage-mount-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .mount-size, .mount-type {
+        text-align: left;
+    }
+}
+
+/* Checkbox Group */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+}
+
+.checkbox-group a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.checkbox-group a:hover {
+    text-decoration: underline;
+}
+
+/* Logs Modal */
+.logs-modal-content {
+    width: 90%;
+    max-width: 900px;
+    height: 70vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.logs-container {
+    flex: 1;
+    background: #0d0d0d;
+    padding: 15px;
+    overflow: auto;
+    font-family: 'Fira Code', 'Monaco', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: #e5e5e5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.logs-container .log-line {
+    padding: 2px 0;
+}
+
+.logs-container .log-timestamp {
+    color: #64748b;
+}
+
+.logs-container .log-error {
+    color: #ef4444;
+}
+
+.logs-container .log-warn {
+    color: #f59e0b;
+}
+
+.logs-container .log-info {
+    color: #3b82f6;
+}

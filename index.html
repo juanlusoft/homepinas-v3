@@ -1,22 +1,68 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="es" data-theme="light" data-lang="es">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HomePiNAS | Premium Control Center</title>
-    <link rel="icon" type="image/svg+xml" href="frontend/logo.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>HomePiNAS | Centro de Control Premium</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="application-name" content="HomePiNAS">
+    <meta name="description" content="Premium Dashboard for Your Home NAS - Manage Docker, Storage, Network and System">
+    <meta name="theme-color" content="#84cc16" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="HomePiNAS">
+    <meta name="msapplication-TileColor" content="#84cc16">
+    <meta name="msapplication-config" content="/browserconfig.xml">
+    <meta name="format-detection" content="telephone=no">
+    
+    <!-- Favicons & Icons -->
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+    <link rel="mask-icon" href="icons/icon.svg" color="#84cc16">
+    <link rel="shortcut icon" href="frontend/logo.svg">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Preconnect for Performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    
+    <!-- Stylesheets -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="frontend/style.css">
+    <link rel="stylesheet" href="frontend/responsive.css">
+    <!-- xterm.js for web terminal -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
 </head>
 
 <body>
-    <!-- Theme Toggle Button -->
-    <button class="theme-toggle" id="theme-toggle" title="Cambiar tema">
-        🎨
+    <!-- Mobile Menu Toggle (Hamburger) -->
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Abrir menú" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
     </button>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Settings Controls (Theme + Language) -->
+    <div class="settings-controls" id="settings-controls">
+        <button class="settings-btn" id="lang-toggle" title="Cambiar idioma">
+            🌐
+        </button>
+        <button class="settings-btn" id="theme-toggle" title="Cambiar tema">
+            🌙
+        </button>
+    </div>
 
     <div id="app">
         <!-- Setup View (Visible if no account exists) -->
@@ -24,48 +70,48 @@
             <div class="glass-card login-card">
                 <div class="brand">
                     <div class="logo-orb"></div>
-                    <h1>Initialize NAS</h1>
-                    <p>Create your Administrative Credentials</p>
+                    <h1 data-i18n="auth.initializeNAS">Inicializar NAS</h1>
+                    <p data-i18n="auth.createCredentials">Crear Credenciales de Administrador</p>
                 </div>
                 <form id="setup-form">
                     <div class="input-group">
                         <input type="text" id="new-username" required placeholder=" ">
-                        <label for="new-username">Admin Username</label>
+                        <label for="new-username" data-i18n="auth.adminUsername">Usuario Administrador</label>
                     </div>
                     <div class="input-group">
                         <input type="password" id="new-password" required placeholder=" ">
-                        <label for="new-password">New Security Key</label>
+                        <label for="new-password" data-i18n="auth.newSecurityKey">Nueva Clave de Seguridad</label>
                     </div>
                     <div class="checkbox-group">
                         <input type="checkbox" id="accept-terms" required>
-                        <label for="accept-terms">Acepto los <a href="#" id="terms-link">términos y condiciones</a> de uso</label>
+                        <label for="accept-terms"><span data-i18n="auth.acceptTerms">Acepto los</span> <a href="#" id="terms-link" data-i18n="auth.termsAndConditions">términos y condiciones</a> <span data-i18n="auth.ofUse">de uso</span></label>
                     </div>
-                    <button type="submit" class="btn-primary">Initialize Gateway</button>
+                    <button type="submit" class="btn-primary" data-i18n="auth.initializeGateway">Inicializar Sistema</button>
                 </form>
             </div>
         </div>
 
-        <!-- Storage Setup View (SnapRAID + MergerFS) -->
+        <!-- Storage Setup View (SnapRAID + MergerFS / NonRAID) -->
         <div id="storage-view" class="view">
             <div class="glass-card storage-card">
                 <div class="brand">
                     <div class="logo-orb"></div>
-                    <h1>Storage Pool Setup</h1>
-                    <p>Configure SnapRAID + MergerFS for your NAS</p>
+                    <h1 data-i18n="storage.poolSetup">Configuración del Pool de Almacenamiento</h1>
+                    <p data-i18n="storage.configureSnapraid">Configurar SnapRAID + MergerFS para tu NAS</p>
                 </div>
 
                 <div class="storage-info-banner">
                     <div class="info-item">
-                        <strong>Data</strong>
-                        <span>Store your files (pooled with MergerFS)</span>
+                        <strong data-i18n="storage.data">Datos</strong>
+                        <span data-i18n="storage.dataDesc">Almacena tus archivos (agrupados con MergerFS)</span>
                     </div>
                     <div class="info-item">
-                        <strong>Parity</strong>
-                        <span>Protects against disk failure (SnapRAID)</span>
+                        <strong data-i18n="storage.parity">Paridad</strong>
+                        <span data-i18n="storage.parityDesc">Protege contra fallos de disco (SnapRAID)</span>
                     </div>
                     <div class="info-item">
-                        <strong>Cache</strong>
-                        <span>Fast NVMe/SSD for frequently accessed data</span>
+                        <strong data-i18n="storage.cache">Caché</strong>
+                        <span data-i18n="storage.cacheDesc">NVMe/SSD rápido para datos frecuentes</span>
                     </div>
                 </div>
 
@@ -73,9 +119,9 @@
                     <table class="disk-table">
                         <thead>
                             <tr>
-                                <th>Disk Info</th>
-                                <th>Type</th>
-                                <th>Role Selection</th>
+                                <th data-i18n="storage.diskInfo">Info del Disco</th>
+                                <th data-i18n="storage.type">Tipo</th>
+                                <th data-i18n="storage.roleSelection">Selección de Rol</th>
                             </tr>
                         </thead>
                         <tbody id="granular-disk-list">
@@ -85,18 +131,18 @@
                 </div>
 
                 <div class="config-summary">
-                    <h3>Pool Configuration</h3>
+                    <h3 data-i18n="storage.poolConfiguration">Configuración del Pool</h3>
                     <div id="selection-summary" class="summary-stats">
-                        <div class="stat data"><span>Data:</span> <span id="data-count">0</span></div>
-                        <div class="stat parity"><span>Parity:</span> <span id="parity-count">0</span></div>
-                        <div class="stat cache"><span>Cache:</span> <span id="cache-count">0</span></div>
+                        <div class="stat data"><span data-i18n="storage.data">Datos:</span> <span id="data-count">0</span></div>
+                        <div class="stat parity"><span data-i18n="storage.parity">Paridad:</span> <span id="parity-count">0</span></div>
+                        <div class="stat cache"><span data-i18n="storage.cache">Caché:</span> <span id="cache-count">0</span></div>
                     </div>
-                    <p class="pool-note">Requiere al menos 1 disco de datos. Paridad opcional. Pool en <code>/mnt/storage</code></p>
+                    <p class="pool-note" data-i18n="storage.requiresDataDisk">Requiere al menos 1 disco de datos. Paridad opcional. Pool en <code>/mnt/storage</code></p>
                 </div>
 
                 <div class="storage-footer">
-                    <button id="save-storage-btn" class="btn-primary">Create Storage Pool</button>
-                    <p class="hint">⚠️ Los discos seleccionados serán FORMATEADOS. Si usas paridad, debe ser >= al disco de datos más grande.</p>
+                    <button id="save-storage-btn" class="btn-primary" data-i18n="storage.createStoragePool">Crear Pool de Almacenamiento</button>
+                    <p class="hint" data-i18n="storage.formatWarning">⚠️ Los discos seleccionados serán FORMATEADOS. Si usas paridad, debe ser >= al disco de datos más grande.</p>
                 </div>
             </div>
         </div>
@@ -106,22 +152,21 @@
             <div class="glass-card login-card">
                 <div class="brand">
                     <div class="logo-orb"></div>
-                    <h1>HomePiNAS</h1>
-                    <p>Secure Enterprise Gateway</p>
+                    <p class="subtitle" data-i18n="auth.hardwareSync">Sincronizando Hardware...</p>
+                    <p class="micro-text" data-i18n="auth.secureGateway">Portal Seguro Empresarial</p>
                 </div>
                 <form id="login-form">
                     <div class="input-group">
                         <input type="text" id="username" required placeholder=" ">
-                        <label for="username">Username</label>
+                        <label for="username" data-i18n="auth.username">Usuario</label>
                     </div>
                     <div class="input-group">
                         <input type="password" id="password" required placeholder=" ">
-                        <label for="password">Security Key</label>
+                        <label for="password" data-i18n="auth.securityKey">Clave de Seguridad</label>
                     </div>
-                    <button type="submit" class="btn-primary">Access Gateway</button>
-                    <button type="button" id="reset-setup-btn" class="btn-link"
-                        style="margin-top: 15px; color: var(--text-dim); background: none; border: none; cursor: pointer; font-size: 0.8rem;">Reset
-                        Setup & Data</button>
+                    <button type="submit" class="btn-primary" data-i18n="auth.accessGateway">Acceder al Sistema</button>
+                    <button type="button" id="reset-setup-btn" class="btn-secondary btn-danger"
+                        data-i18n="auth.resetSetupData">Restablecer Configuración</button>
                 </form>
             </div>
         </div>
@@ -133,11 +178,12 @@
                     <img src="frontend/logo.svg" alt="HomeLabs">
                 </div>
                 <ul class="nav-links">
-                    <li class="active" data-view="dashboard">Overview</li>
-                    <li data-view="docker">Docker Manager</li>
-                    <li data-view="storage">Storage</li>
-                    <li data-view="network">Network</li>
-                    <li data-view="system">System</li>
+                    <li class="active" data-view="dashboard" data-i18n="nav.overview">Resumen</li>
+                    <li data-view="docker" data-i18n="nav.docker">Docker</li>
+                    <li data-view="storage" data-i18n="nav.storage">Almacenamiento</li>
+                    <li data-view="terminal" data-i18n="nav.terminal">Terminal</li>
+                    <li data-view="network" data-i18n="nav.network">Red</li>
+                    <li data-view="system" data-i18n="nav.system">Sistema</li>
                 </ul>
                 <div class="user-info">
                     <div class="avatar"></div>
@@ -147,7 +193,7 @@
             </nav>
             <main class="content">
                 <header>
-                    <h2 id="view-title">System Overview</h2>
+                    <h2 id="view-title" data-i18n="dashboard.systemOverview">Resumen del Sistema</h2>
                 </header>
                 <div id="dashboard-content" class="grid-container">
                     <!-- Dynamic Content -->
@@ -160,32 +206,32 @@
     <div id="storage-progress-modal" class="modal">
         <div class="glass-card modal-content storage-progress">
             <header class="modal-header">
-                <h3>🔧 Configuring Storage Pool</h3>
+                <h3>🔧 <span data-i18n="progress.configuringPool">Configurando Pool de Almacenamiento</span></h3>
             </header>
             <div class="progress-container">
                 <div class="progress-step" id="step-format">
                     <span class="step-icon">⏳</span>
-                    <span class="step-text">Formatting disks...</span>
+                    <span class="step-text" data-i18n="progress.formattingDisks">Formateando discos...</span>
                 </div>
                 <div class="progress-step" id="step-mount">
                     <span class="step-icon">⏳</span>
-                    <span class="step-text">Mounting partitions...</span>
+                    <span class="step-text" data-i18n="progress.mountingPartitions">Montando particiones...</span>
                 </div>
                 <div class="progress-step" id="step-snapraid">
                     <span class="step-icon">⏳</span>
-                    <span class="step-text">Creating SnapRAID config...</span>
+                    <span class="step-text" data-i18n="progress.creatingSnapraid">Creando configuración SnapRAID...</span>
                 </div>
                 <div class="progress-step" id="step-mergerfs">
                     <span class="step-icon">⏳</span>
-                    <span class="step-text">Configuring MergerFS pool...</span>
+                    <span class="step-text" data-i18n="progress.configuringMergerfs">Configurando pool MergerFS...</span>
                 </div>
                 <div class="progress-step" id="step-fstab">
                     <span class="step-icon">⏳</span>
-                    <span class="step-text">Updating /etc/fstab...</span>
+                    <span class="step-text" data-i18n="progress.updatingFstab">Actualizando /etc/fstab...</span>
                 </div>
                 <div class="progress-step" id="step-sync">
                     <span class="step-icon">⏳</span>
-                    <span class="step-text">Initial SnapRAID sync...</span>
+                    <span class="step-text" data-i18n="progress.initialSync">Sincronización inicial SnapRAID...</span>
                     <div class="sync-progress-bar">
                         <div class="sync-progress-fill" id="sync-progress-fill"></div>
                     </div>
@@ -193,7 +239,7 @@
                 </div>
             </div>
             <div class="progress-footer">
-                <p id="progress-message">Please wait, this may take several minutes...</p>
+                <p id="progress-message" data-i18n="progress.pleaseWait">Por favor espera, esto puede tardar varios minutos...</p>
             </div>
         </div>
     </div>
@@ -202,13 +248,13 @@
     <div id="ddns-modal" class="modal">
         <div class="glass-card modal-content">
             <header class="modal-header">
-                <h3>Add New DDNS Service</h3>
+                <h3 data-i18n="network.addService">Añadir Servicio DDNS</h3>
                 <button id="close-modal" class="btn-close">&times;</button>
             </header>
             <form id="ddns-form">
                 <div class="input-group">
                     <select id="ddns-service-select" required>
-                        <option value="" disabled selected>Select Provider</option>
+                        <option value="" disabled selected data-i18n="network.selectProvider">Seleccionar Proveedor</option>
                         <option value="cloudflare">Cloudflare</option>
                         <option value="noip">No-IP</option>
                         <option value="duckdns">DuckDNS</option>
@@ -231,72 +277,172 @@
     <div id="terms-modal" class="modal">
         <div class="glass-card modal-content terms-content">
             <header class="modal-header">
-                <h3>Términos y Condiciones de Uso</h3>
+                <h3 data-i18n="terms.title">Términos y Condiciones de Uso</h3>
                 <button id="close-terms-modal" class="btn-close">&times;</button>
             </header>
             <div class="terms-body">
-                <h4>1. Aceptación de los Términos</h4>
-                <p>Al utilizar HomePiNAS, aceptas estos términos y condiciones en su totalidad. Si no estás de acuerdo con alguna parte, no debes utilizar este software.</p>
+                <h4>1. <span data-i18n="terms.acceptance">Aceptación de los Términos</span></h4>
+                <p data-i18n="terms.acceptanceText">Al utilizar HomePiNAS, aceptas estos términos y condiciones en su totalidad. Si no estás de acuerdo con alguna parte, no debes utilizar este software.</p>
 
-                <h4>2. Descripción del Servicio</h4>
-                <p>HomePiNAS es un software de gestión de almacenamiento NAS para Raspberry Pi. El software se proporciona "tal cual" sin garantías de ningún tipo.</p>
+                <h4>2. <span data-i18n="terms.description">Descripción del Servicio</span></h4>
+                <p data-i18n="terms.descriptionText">HomePiNAS es un software de gestión de almacenamiento NAS para Raspberry Pi. El software se proporciona "tal cual" sin garantías de ningún tipo.</p>
 
-                <h4>3. Uso del Software</h4>
-                <p>El usuario es responsable de:</p>
+                <h4>3. <span data-i18n="terms.usage">Uso del Software</span></h4>
+                <p data-i18n="terms.usageText">El usuario es responsable de:</p>
                 <ul>
-                    <li>Mantener copias de seguridad de sus datos importantes</li>
-                    <li>La seguridad de sus credenciales de acceso</li>
-                    <li>El uso adecuado del hardware y software</li>
-                    <li>Cumplir con las leyes aplicables en su jurisdicción</li>
+                    <li data-i18n="terms.usageItem1">Mantener copias de seguridad de sus datos importantes</li>
+                    <li data-i18n="terms.usageItem2">La seguridad de sus credenciales de acceso</li>
+                    <li data-i18n="terms.usageItem3">El uso adecuado del hardware y software</li>
+                    <li data-i18n="terms.usageItem4">Cumplir con las leyes aplicables en su jurisdicción</li>
                 </ul>
 
-                <h4>4. Limitación de Responsabilidad</h4>
-                <p>HomePiNAS y sus desarrolladores no serán responsables de:</p>
+                <h4>4. <span data-i18n="terms.liability">Limitación de Responsabilidad</span></h4>
+                <p data-i18n="terms.liabilityText">HomePiNAS y sus desarrolladores no serán responsables de:</p>
                 <ul>
-                    <li>Pérdida de datos por cualquier motivo</li>
-                    <li>Daños al hardware</li>
-                    <li>Interrupciones del servicio</li>
-                    <li>Accesos no autorizados debido a configuraciones del usuario</li>
+                    <li data-i18n="terms.liabilityItem1">Pérdida de datos por cualquier motivo</li>
+                    <li data-i18n="terms.liabilityItem2">Daños al hardware</li>
+                    <li data-i18n="terms.liabilityItem3">Interrupciones del servicio</li>
+                    <li data-i18n="terms.liabilityItem4">Accesos no autorizados debido a configuraciones del usuario</li>
                 </ul>
 
-                <h4>5. Privacidad</h4>
-                <p>HomePiNAS no recopila ni envía datos personales a servidores externos. Todos los datos se almacenan localmente en tu dispositivo.</p>
+                <h4>5. <span data-i18n="terms.privacy">Privacidad</span></h4>
+                <p data-i18n="terms.privacyText">HomePiNAS no recopila ni envía datos personales a servidores externos. Todos los datos se almacenan localmente en tu dispositivo.</p>
 
-                <h4>6. Modificaciones</h4>
-                <p>Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios serán efectivos inmediatamente después de su publicación.</p>
+                <h4>6. <span data-i18n="terms.modifications">Modificaciones</span></h4>
+                <p data-i18n="terms.modificationsText">Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios serán efectivos inmediatamente después de su publicación.</p>
 
-                <h4>7. Contacto</h4>
-                <p>Para cualquier consulta sobre estos términos, visita <a href="https://homelabs.club" target="_blank">homelabs.club</a></p>
+                <h4>7. <span data-i18n="terms.contact">Contacto</span></h4>
+                <p><span data-i18n="terms.contactText">Para cualquier consulta sobre estos términos, visita</span> <a href="https://homelabs.club" target="_blank">homelabs.club</a></p>
             </div>
             <div class="modal-footer">
-                <button id="accept-terms-btn" class="btn-primary">Entendido</button>
+                <button id="accept-terms-btn" class="btn-primary" data-i18n="terms.understood">Entendido</button>
             </div>
         </div>
     </div>
 
-    <!-- Theme Toggle Script -->
+    <!-- Terminal Modal -->
+    <div id="terminal-modal" class="modal">
+        <div class="glass-card modal-content terminal-modal-content">
+            <header class="modal-header">
+                <h3>💻 <span data-i18n="terminal.title">Terminal Web</span></h3>
+                <div class="terminal-controls">
+                    <button id="terminal-fullscreen" class="btn-sm" title="Pantalla completa">⛶</button>
+                    <button id="close-terminal-modal" class="btn-close">&times;</button>
+                </div>
+            </header>
+            <div id="terminal-container" class="terminal-container">
+                <!-- xterm.js terminal will be rendered here -->
+            </div>
+            <div class="terminal-status">
+                <span id="terminal-status-text" data-i18n="terminal.connecting">Conectando...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Docker Logs Modal -->
+    <div id="docker-logs-modal" class="modal">
+        <div class="glass-card modal-content docker-logs-content">
+            <header class="modal-header">
+                <h3>📜 <span data-i18n="docker.viewLogs">Container Logs</span></h3>
+                <div class="logs-controls">
+                    <button id="refresh-logs" class="btn-sm" title="Refresh">🔄</button>
+                    <button id="close-logs-modal" class="btn-close">&times;</button>
+                </div>
+            </header>
+            <pre id="docker-logs-content" class="logs-content"></pre>
+        </div>
+    </div>
+
+    <!-- Docker Compose Edit Modal -->
+    <div id="docker-compose-modal" class="modal">
+        <div class="glass-card modal-content compose-edit-content">
+            <header class="modal-header">
+                <h3>📝 <span data-i18n="docker.editCompose">Edit Compose</span></h3>
+                <button id="close-compose-modal" class="btn-close">&times;</button>
+            </header>
+            <div class="compose-editor">
+                <textarea id="compose-content" class="compose-textarea" spellcheck="false"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="save-compose-btn" class="btn-primary" data-i18n="common.save">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+    
+    <!-- Theme and Language Toggle Script -->
     <script>
         (function() {
             const html = document.documentElement;
-            const toggle = document.getElementById('theme-toggle');
+            const themeToggle = document.getElementById('theme-toggle');
+            const langToggle = document.getElementById('lang-toggle');
+            const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
 
-            // Load saved theme or default to light
+            // Load saved theme
             const savedTheme = localStorage.getItem('homepinas-theme') || 'light';
             html.setAttribute('data-theme', savedTheme);
-            updateIcon(savedTheme);
+            updateThemeIcon(savedTheme);
 
-            toggle.addEventListener('click', () => {
+            // Load saved language
+            const savedLang = localStorage.getItem('homepinas-lang') || 
+                             (navigator.language.startsWith('es') ? 'es' : 'en');
+            html.setAttribute('data-lang', savedLang);
+            html.setAttribute('lang', savedLang);
+
+            // Theme toggle
+            themeToggle?.addEventListener('click', () => {
                 const current = html.getAttribute('data-theme');
                 const next = current === 'light' ? 'dark' : 'light';
                 html.setAttribute('data-theme', next);
                 localStorage.setItem('homepinas-theme', next);
-                updateIcon(next);
+                updateThemeIcon(next);
             });
 
-            function updateIcon(theme) {
-                toggle.textContent = theme === 'light' ? '🌙' : '☀️';
-                toggle.title = theme === 'light' ? 'Modo oscuro' : 'Modo claro';
+            function updateThemeIcon(theme) {
+                if (themeToggle) {
+                    themeToggle.textContent = theme === 'light' ? '🌙' : '☀️';
+                    themeToggle.title = theme === 'light' ? 'Modo oscuro' : 'Modo claro';
+                }
             }
+
+            // Language toggle
+            langToggle?.addEventListener('click', () => {
+                const current = html.getAttribute('data-lang');
+                const next = current === 'es' ? 'en' : 'es';
+                html.setAttribute('data-lang', next);
+                html.setAttribute('lang', next);
+                localStorage.setItem('homepinas-lang', next);
+                window.dispatchEvent(new CustomEvent('langchange', { detail: { lang: next } }));
+            });
+
+            // Mobile menu toggle
+            mobileMenuToggle?.addEventListener('click', () => {
+                const isOpen = sidebar?.classList.toggle('open');
+                mobileMenuToggle.setAttribute('aria-expanded', isOpen);
+                overlay?.classList.toggle('active', isOpen);
+            });
+
+            // Close menu on overlay click
+            overlay?.addEventListener('click', () => {
+                sidebar?.classList.remove('open');
+                mobileMenuToggle?.setAttribute('aria-expanded', 'false');
+                overlay.classList.remove('active');
+            });
+
+            // Close menu on ESC key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && sidebar?.classList.contains('open')) {
+                    sidebar.classList.remove('open');
+                    mobileMenuToggle?.setAttribute('aria-expanded', 'false');
+                    overlay?.classList.remove('active');
+                }
+            });
         })();
     </script>
     <script type="module" src="frontend/main.js"></script>

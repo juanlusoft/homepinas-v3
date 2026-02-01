@@ -1,10 +1,18 @@
-# HomePiNAS v3.0.0
+# HomePiNAS v3.1.0
 
 Premium NAS Dashboard with Dual Storage Backend Support - Homelabs.club Edition
 
-## New in v3.0.0: Choose Your Storage Backend
+## New in v3.1.0: Extended Features
 
-During installation, you can now choose between two storage backends:
+- **Web Terminal** - Full PTY-based terminal with xterm.js
+- **i18n Support** - English and Spanish translations
+- **Docker Enhanced** - Ports, notes, logs, compose editor
+- **Shortcuts** - Configurable program shortcuts (htop, mc, tmux)
+- **PWA** - Progressive Web App support
+
+## Storage Backend Options
+
+During installation, you can choose between two storage backends:
 
 | Feature | SnapRAID + MergerFS | NonRAID |
 |---------|---------------------|---------|
@@ -24,14 +32,26 @@ The installer will prompt you to choose your storage backend.
 
 ## Features
 
+### Core Features
 - **Dual Storage Backend** - Choose SnapRAID+MergerFS or NonRAID
 - **Samba Sharing** - Network file sharing with flexible share modes
-- **Docker Management** - Container control from dashboard
+- **Docker Management** - Full container control from dashboard
 - **Fan Control** - PWM control for EMC2305 (Silent/Balanced/Performance)
 - **System Monitoring** - CPU, Memory, Disk, Network stats
 - **DDNS Support** - Cloudflare, No-IP, DuckDNS
 - **HTTPS** - Self-signed certificates
 - **OTA Updates** - Update from dashboard
+
+### New in v3.1.0
+- **Web Terminal** - PTY-based terminal with xterm.js (htop, mc, bash)
+- **i18n** - Multi-language support (ES/EN)
+- **Docker Ports** - See exposed ports for each container
+- **Docker Notes** - Add notes/comments to containers
+- **Docker Logs** - View container logs from dashboard
+- **Compose Editor** - Edit docker-compose files in the UI
+- **Program Shortcuts** - Quick access to htop, mc, tmux, etc.
+- **PWA** - Install as Progressive Web App
+- **Mobile Responsive** - Full mobile support with hamburger menu
 
 ## Storage Backend Details
 
@@ -72,13 +92,19 @@ When using NonRAID, you can choose how shares are configured:
 
 ## Version History
 
+- **3.1.0** - Extended Features
+  - Web Terminal (PTY + xterm.js)
+  - i18n (English/Spanish)
+  - Docker ports, notes, logs, compose editor
+  - Program shortcuts (htop, mc, tmux)
+  - PWA support
+  - Mobile responsive design
+
 - **3.0.0** - Dual Storage Backend Support
   - Interactive backend selection during install
   - NonRAID kernel driver support
   - Flexible share modes for NonRAID
   - Kernel compatibility checking
-
-- **2.0.14** - Previous stable release (SnapRAID + MergerFS only)
 
 ## Security Features
 
