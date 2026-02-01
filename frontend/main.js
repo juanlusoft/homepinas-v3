@@ -7,6 +7,7 @@ const state = {
     publicIP: 'Scanning...',
     globalStats: { cpuLoad: 0, cpuTemp: 0, ramUsed: 0, ramTotal: 0, uptime: 0 },
     storageConfig: [],
+    storageBackend: 'snapraid', // 'snapraid' or 'nonraid'
     disks: [],
     network: {
         interfaces: [],
@@ -164,9 +165,10 @@ async function initAuth() {
         // Try to load existing session
         loadSession();
 
-        const [statusRes, disksRes] = await Promise.all([
+        const [statusRes, disksRes, backendRes] = await Promise.all([
             fetch(`${API_BASE}/system/status`),
-            fetch(`${API_BASE}/system/disks`)
+            fetch(`${API_BASE}/system/disks`),
+            fetch(`${API_BASE}/storage/backend`)
         ]);
 
         if (!statusRes.ok || !disksRes.ok) {
@@ -175,6 +177,12 @@ async function initAuth() {
 
         const status = await statusRes.json();
         state.disks = await disksRes.json();
+        
+        // Get storage backend type
+        if (backendRes.ok) {
+            const backendData = await backendRes.json();
+            state.storageBackend = backendData.backend || 'snapraid';
+        }
 
         state.user = status.user;
         state.storageConfig = status.storageConfig;
@@ -404,6 +412,26 @@ function showProgressModal() {
                 if (icon) icon.textContent = '⏳';
             }
         });
+        
+        // Update step labels based on backend type
+        if (state.storageBackend === 'nonraid') {
+            const snapraidStep = progressSteps.snapraid;
+            const mergerfsStep = progressSteps.mergerfs;
+            const syncStep = progressSteps.sync;
+            
+            if (snapraidStep) {
+                const text = snapraidStep.querySelector('.step-text');
+                if (text) text.textContent = 'Creating NonRAID config...';
+            }
+            if (mergerfsStep) {
+                const text = mergerfsStep.querySelector('.step-text');
+                if (text) text.textContent = 'Configuring parity protection...';
+            }
+            if (syncStep) {
+                const text = syncStep.querySelector('.step-text');
+                if (text) text.textContent = 'Starting NonRAID service...';
+            }
+        }
     }
 }
 
@@ -559,10 +587,24 @@ if (saveStorageBtn) {
             updateProgressStep('format', 'active');
             await new Promise(r => setTimeout(r, 500));
 
+            // Determine the correct endpoint and payload based on backend
+            let configEndpoint, requestBody;
+            
+            if (state.storageBackend === 'nonraid') {
+                configEndpoint = `${API_BASE}/storage/array/configure`;
+                // NonRAID expects dataDisks and parityDisk arrays
+                const dataDisks = selections.filter(s => s.role === 'data').map(s => s.id);
+                const parityDisk = selections.filter(s => s.role === 'parity').map(s => s.id);
+                requestBody = { dataDisks, parityDisk: parityDisk[0], shareMode: 'individual' };
+            } else {
+                configEndpoint = `${API_BASE}/storage/pool/configure`;
+                requestBody = { disks: selections };
+            }
+
             // Call configure endpoint
-            const res = await authFetch(`${API_BASE}/storage/pool/configure`, {
+            const res = await authFetch(configEndpoint, {
                 method: 'POST',
-                body: JSON.stringify({ disks: selections })
+                body: JSON.stringify(requestBody)
             });
 
             const data = await res.json();
@@ -591,26 +633,34 @@ if (saveStorageBtn) {
             await new Promise(r => setTimeout(r, 500));
             updateProgressStep('fstab', 'completed');
 
-            // Step 6: SnapRAID initial sync
+            // Step 6: Sync/Start service
             updateProgressStep('sync', 'active');
-            updateSyncProgress(0, 'Starting initial sync...');
-
-            // Start sync in background
-            try {
-                await authFetch(`${API_BASE}/storage/snapraid/sync`, { method: 'POST' });
-                // Poll for progress
-                const syncResult = await pollSyncProgress();
-
-                if (!syncResult.success) {
-                    console.warn('Sync warning:', syncResult.error);
-                    // Don't fail the whole process, sync can be run later
-                    updateProgressStep('sync', 'completed');
-                    updateSyncProgress(100, 'Sync will complete in background');
-                }
-            } catch (syncError) {
-                console.warn('Sync skipped:', syncError);
+            
+            if (state.storageBackend === 'nonraid') {
+                // NonRAID: Just start the service, no sync needed
+                updateSyncProgress(0, 'Starting NonRAID service...');
+                await new Promise(r => setTimeout(r, 1000));
+                updateSyncProgress(100, 'NonRAID service started');
                 updateProgressStep('sync', 'completed');
-                updateSyncProgress(100, 'Sync scheduled for later');
+            } else {
+                // SnapRAID: Start sync in background
+                updateSyncProgress(0, 'Starting initial sync...');
+                try {
+                    await authFetch(`${API_BASE}/storage/snapraid/sync`, { method: 'POST' });
+                    // Poll for progress
+                    const syncResult = await pollSyncProgress();
+
+                    if (!syncResult.success) {
+                        console.warn('Sync warning:', syncResult.error);
+                        // Don't fail the whole process, sync can be run later
+                        updateProgressStep('sync', 'completed');
+                        updateSyncProgress(100, 'Sync will complete in background');
+                    }
+                } catch (syncError) {
+                    console.warn('Sync skipped:', syncError);
+                    updateProgressStep('sync', 'completed');
+                    updateSyncProgress(100, 'Sync scheduled for later');
+                }
             }
 
             state.storageConfig = selections;
@@ -618,7 +668,11 @@ if (saveStorageBtn) {
             // Update progress message
             const progressMsg = document.getElementById('progress-message');
             if (progressMsg) {
-                progressMsg.innerHTML = `✅ <strong>Storage Pool Created!</strong><br>Pool mounted at: ${data.poolMount}`;
+                if (state.storageBackend === 'nonraid') {
+                    progressMsg.innerHTML = `✅ <strong>NonRAID Array Created!</strong><br>Disks mounted at /mnt/disk[N]`;
+                } else {
+                    progressMsg.innerHTML = `✅ <strong>Storage Pool Created!</strong><br>Pool mounted at: ${escapeHtml(data.poolMount || '/mnt/storage')}`;
+                }
             }
 
             // Show continue button
