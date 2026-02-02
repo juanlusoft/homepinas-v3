@@ -325,16 +325,26 @@ router.get('/disks', async (req, res) => {
                 const sizeGB = (dev.size / 1024 / 1024 / 1024).toFixed(0);
 
                 let diskType = 'HDD';
-                if (layoutInfo.interfaceType === 'NVMe' || dev.name.includes('nvme')) {
-                    diskType = 'NVMe';
-                } else if ((layoutInfo.type || '').includes('SSD') || (layoutInfo.name || '').toLowerCase().includes('ssd')) {
-                    diskType = 'SSD';
-                }
-
                 let temp = null;
                 let serial = layoutInfo.serial || null;
+                let model = layoutInfo.model || layoutInfo.name || null;
+                
+                // Use smartctl to get accurate model, serial, temp and detect NVMe via USB
                 try {
                     const smartOutput = execSync(`sudo smartctl -i -A /dev/${dev.name} 2>/dev/null`, { encoding: 'utf8', timeout: 5000 });
+
+                    // Get model from smartctl (more reliable than lsblk for USB-connected drives)
+                    const modelMatch = smartOutput.match(/Model Number:\s*(.+)/i) || 
+                                      smartOutput.match(/Device Model:\s*(.+)/i) ||
+                                      smartOutput.match(/Product:\s*(.+)/i);
+                    if (modelMatch) {
+                        model = modelMatch[1].trim();
+                    }
+                    
+                    // Detect NVMe from model name (for USB-connected NVMe drives)
+                    if (model && model.toLowerCase().includes('nvme')) {
+                        diskType = 'NVMe';
+                    }
 
                     const tempMatch = smartOutput.match(/Temperature.*?(\d+)\s*(Celsius|C)/i) ||
                                      smartOutput.match(/194\s+Temperature.*?\s(\d+)(\s|$)/);
@@ -352,13 +362,22 @@ router.get('/disks', async (req, res) => {
                         }
                     }
                 } catch (e) {}
+                
+                // Fallback disk type detection if not already detected as NVMe
+                if (diskType === 'HDD') {
+                    if (layoutInfo.interfaceType === 'NVMe' || dev.name.includes('nvme')) {
+                        diskType = 'NVMe';
+                    } else if ((layoutInfo.type || '').includes('SSD') || (model || '').toLowerCase().includes('ssd')) {
+                        diskType = 'SSD';
+                    }
+                }
 
                 return {
                     id: dev.name,
                     device: dev.device,
                     type: diskType,
                     size: sizeGB + 'GB',
-                    model: layoutInfo.model || layoutInfo.name || 'Unknown Drive',
+                    model: model || 'Unknown Drive',
                     serial: serial || 'N/A',
                     temp: temp || (35 + Math.floor(Math.random() * 10)),
                     usage: 0
